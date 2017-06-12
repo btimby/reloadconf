@@ -19,7 +19,7 @@ this procedure is repeated.
 
 Here is an example usage for nginx.
 
-::
+.code ::
     $ reloadconf --config=/etc/nginx/nginx.conf --command="nginx -g nodaemon: true" --test="nginx -t" --watch=/tmp/nginx
 
 First of all, if ``/etc/nginx/nginx.conf`` exists, it will be verified using
@@ -27,3 +27,10 @@ First of all, if ``/etc/nginx/nginx.conf`` exists, it will be verified using
 reloadconf will then proceed to watch ``/tmp/nginx`` for a file name
 ``nginx.conf``. If present, that fill will be tested, and a if successful
 a HUP signal will be sent to nginx (or nginx will be started).
+
+Docker
+======
+ReloadConf is generally useful whenever you want a process to recieve a HUP
+signal after new configuration is written. It was written to be used with
+docker where one container generates a config file for a process in another
+container.
