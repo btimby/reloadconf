@@ -37,7 +37,7 @@ time.sleep(2)
 logging.basicConfig(
     stream=sys.stderr,
     # Change level to DEBUG here if you need to.
-    level=logging.DEBUG,
+    level=logging.CRITICAL,
     format='%(thread)d: %(message)s'
 )
 LOGGER = logging.getLogger(__name__)

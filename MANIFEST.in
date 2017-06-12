@@ -1,2 +1,3 @@
-README.rst
-bin/reloadconf
+include requirements.txt
+include README.rst
+

@@ -19,7 +19,8 @@ this procedure is repeated.
 
 Here is an example usage for nginx.
 
-.code ::
+::
+
     $ reloadconf --config=/etc/nginx/nginx.conf --command="nginx -g nodaemon: true" --test="nginx -t" --watch=/tmp/nginx
 
 First of all, if ``/etc/nginx/nginx.conf`` exists, it will be verified using
@@ -33,4 +34,17 @@ Docker
 ReloadConf is generally useful whenever you want a process to recieve a HUP
 signal after new configuration is written. It was written to be used with
 docker where one container generates a config file for a process in another
-container.
+container. To use it for this purpose, simply install then utilize
+reloadconf in your Dockerfile.
+
+::
+
+    # Install reloadconf.
+    RUN pip install reloadconf
+
+    # Map a volume into the container.
+    VOLUME /mnt/data/nginx/:/conf/
+
+    # Watch for another container to modify the conf and reload nginx.
+    CMD reloadconf --command="nginx -c /conf/nginx.conf -g'nodaemon: true;'" --watch=/conf/in --test="nginx -c /conf/nginx.conf -t" --config=/conf/nginx.conf
+
