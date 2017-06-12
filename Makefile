@@ -22,3 +22,5 @@ travis:
 coveralls:
 	coveralls -v
 
+clean:
+	rm -rf dist/ *.egg-info htmlcov .coverage

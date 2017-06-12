@@ -1,4 +1,2 @@
 docopt
-coverage
-flake8
 
