@@ -17,6 +17,7 @@ from hashlib import md5
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.addHandler(logging.NullHandler())
+DEVNULL = open(os.devnull, 'w')
 
 
 def checksum(path):
@@ -110,7 +111,11 @@ class ReloadConf(object):
         if self.test is None:
             return True
         # Attempt parse.
-        return subprocess.call(shlex.split(self.test)) == 0
+        return subprocess.call(
+            shlex.split(self.test),
+            stderr=subprocess.STDOUT,
+            stdout=DEVNULL
+        ) == 0
 
     def backup_create(self):
         """Backs up entire configuration."""
