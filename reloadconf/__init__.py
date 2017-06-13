@@ -110,10 +110,6 @@ class ReloadConf(object):
         # If there is no test command, assume the config is good to go.
         if self.test is None:
             return True
-        # Ensure config files exists before verifying.
-        for file in self.config:
-            if not pathexists(file):
-                return False
         # Attempt parse.
         return subprocess.call(shlex.split(self.test)) == 0
 
