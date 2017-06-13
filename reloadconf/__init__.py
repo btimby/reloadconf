@@ -10,7 +10,6 @@ import shlex
 import shutil
 
 from os.path import basename, dirname
-from os.path import exists as pathexists
 from os.path import join as pathjoin
 from os.path import splitext
 from hashlib import md5
