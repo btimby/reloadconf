@@ -76,12 +76,13 @@ def main(opt):
         time.sleep(3.0)
 
 
-# Set up logging so we can see output.
-LOGGER.addHandler(logging.StreamHandler(sys.stdout))
-
 opt = docopt(main.__doc__)
 
+logger = logging.getLogger()
+# Set up logging so we can see output.
+logger.addHandler(logging.StreamHandler(sys.stdout))
+
 if opt.pop('--debug', None):
-    LOGGER.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
 
 main(opt)
