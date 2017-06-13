@@ -14,8 +14,6 @@ from os.path import join as pathjoin
 from os.path import basename
 
 from reloadconf import ReloadConf
-from reloadconf.__main__ import main
-
 
 # Program to indicate HUP signal received.
 TEST_PROGRAM = b"""#!/usr/bin/env python
@@ -123,17 +121,24 @@ class TestReloadConf(unittest.TestCase):
         signal.signal(signal.SIGALRM, _alarm)
         signal.alarm(2)
 
-        try:
-            main({
-                '--watch': self.dir,
-                '--config': self.file,
-                '--command': '/bin/sleep 1',
-                '--test': '/bin/true',
-            })
-            self.fail('Should never reach this')
-        except Sentinal:
-            pass
+        sysargv = sys.argv
 
+        sys.argv = [
+            'reloadconf',
+            '--watch=%s' % self.dir,
+            '--config=%s' % self.file,
+            '--command=/bin/sleep 1',
+            '--test=/bin/true',
+        ]
+
+        try:
+            try:
+                import reloadconf.__main__
+                self.fail('Should never reach this')
+            except Sentinal:
+                pass
+        finally:
+            sys.argv = sysargv
 
 if __name__ == '__main__':
     unittest.main()

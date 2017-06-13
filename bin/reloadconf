@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env python
 
-/usr/bin/env python -m reloadconf $@
+import reloadconf.__main__
 

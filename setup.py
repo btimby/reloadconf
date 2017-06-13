@@ -1,4 +1,4 @@
-"""Trivial Postgres Queue"""
+"""ReloadConf"""
 import os
 
 from subprocess import check_output, CalledProcessError
@@ -22,10 +22,10 @@ try:
 except (CalledProcessError, OSError):
     with open(version_py, 'rt') as f:
         version_git = f.read().strip().split('=')[-1].replace('"', '')
-
-# Write out version.py.
-with open(version_py, 'wt') as f:
-    f.write(version_msg.format(ver=version_git, nl=os.linesep))
+else:
+    # Write out version.py.
+    with open(version_py, 'wt') as f:
+        f.write(version_msg.format(ver=version_git, nl=os.linesep))
 
 
 setup(
