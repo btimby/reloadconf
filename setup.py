@@ -19,7 +19,7 @@ version_py = os.path.join(os.path.dirname(__file__), package_name, 'version.py')
 try:
     version_git = check_output(['git', 'describe', '--tags']).rstrip()
     version_git = version_git.decode('utf-8')
-except CalledProcessError:
+except (CalledProcessError, OSError):
     with open(version_py, 'rt') as f:
         version_git = f.read().strip().split('=')[-1].replace('"', '')
 
