@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+"""ReloadConf"""
 
 import errno
 import logging
@@ -114,11 +114,7 @@ class ReloadConf(object):
         if self.test is None:
             return True
         # Attempt parse.
-        return subprocess.call(
-            shlex.split(self.test),
-            stderr=subprocess.STDOUT,
-            stdout=DEVNULL
-        ) == 0
+        return subprocess.call(shlex.split(self.test)) == 0
 
     def backup_create(self):
         """Backs up entire configuration."""
