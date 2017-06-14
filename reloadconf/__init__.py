@@ -103,7 +103,8 @@ class ReloadConf(object):
             self.test_and_swap(new_config)
         elif not self.check_command():
             if self.test_command():
-                LOGGER.debug('Command not running and valid configuration found')
+                LOGGER.debug('Command not running and valid configuration '
+                             'found')
                 # If command is not running and config is valid, start command.
                 self.start_command()
             else:
