@@ -66,6 +66,8 @@ def main(opt):
     }
 
     control = ReloadConf(**kwargs)
+    LOGGER.info('Reloadconf monitoring %s for %s', kwargs['watch'],
+                kwargs['command'])
 
     while True:
         try:
@@ -82,6 +84,7 @@ logger = logging.getLogger()
 # Set up logging so we can see output.
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
+logger.setLevel(logging.INFO)
 if opt.pop('--debug', None):
     logger.setLevel(logging.DEBUG)
 

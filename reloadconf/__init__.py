@@ -97,13 +97,16 @@ class ReloadConf(object):
             # these config files.
             time.sleep(1.0)
         if new_config:
-            LOGGER.info('New config found %s', ', '.join(new_config))
+            LOGGER.info('New configuration found %s', ', '.join(new_config))
             # TODO: compare new config checksums with old to see if there are
             # really changes.
             self.test_and_swap(new_config)
         elif not self.check_command() and self.test_command():
+            LOGGER.debug('Command not running and valid configuration found')
             # If command is not running and config is valid, start command.
             self.start_command()
+        else:
+            LOGGER.debug('Nothing to do')
 
     def test_command(self):
         """Run test command to verify configuration."""
@@ -129,7 +132,7 @@ class ReloadConf(object):
                 if e.errno != errno.ENOENT:
                     raise
                 # If the config file is missing, we can skip backing it up.
-                LOGGER.warning('Config file %s missing, skipping backup', file)
+                LOGGER.warning('File %s missing, skipping backup', file)
             else:
                 prev_config.add(backup)
         return prev_config
@@ -139,6 +142,7 @@ class ReloadConf(object):
         for path in prev_config:
             try:
                 os.remove(path)
+                LOGGER.debug('Removed backup: %s', path)
             except IOError as e:
                 if e.errno != errno.ENOENT:
                     LOGGER.warning('Could not remove backup: %s', path)
@@ -153,6 +157,7 @@ class ReloadConf(object):
 
     def test_and_swap(self, new_config):
         """Backup old config, write new config, test config, HUP or restore."""
+        LOGGER.info('Attempting to apply new configuration')
         prev_config = self.backup_create()
         # We have backed up ALL config files (not just the ones we might
         # replace). If any error occurs from here out, we will need to restore
@@ -163,24 +168,24 @@ class ReloadConf(object):
                 # directories).
                 dst = [p for p in self.config if basename(p) == file][0]
                 src = pathjoin(self.watch, file)
-                LOGGER.debug('Overwriting %s with %s', src, dst)
                 try:
                     os.makedirs(dirname(dst))
                 except OSError as e:
                     if e.errno != errno.EEXIST:
                         raise
+                LOGGER.debug('Overwriting %s with %s', src, dst)
                 shutil.move(src, dst)
             # We have now merged in our new configuration files, lets test this
             # config.
             if self.test_command():
-                LOGGER.debug('Config good, reloading')
+                LOGGER.debug('Configuration good, reloading')
                 if self.check_command():
                     self.reload_command()
                 else:
                     self.start_command(wait_for_config=False)
                 self.backup_remove(prev_config)
             else:
-                LOGGER.debug('Config bad, restoring')
+                LOGGER.info('Configuration bad, restoring')
                 self.backup_restore(prev_config)
         except:
             LOGGER.exception('Failure, restoring config', exc_info=True)
