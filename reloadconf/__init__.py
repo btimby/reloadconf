@@ -108,13 +108,17 @@ class ReloadConf(object):
         else:
             LOGGER.debug('Nothing to do')
 
-    def test_command(self):
+    def test_command(self, quiet=True):
         """Run test command to verify configuration."""
         # If there is no test command, assume the config is good to go.
         if self.test is None:
             return True
         # Attempt parse.
-        return subprocess.call(shlex.split(self.test)) == 0
+        kwargs = {}
+        if quiet:
+            kwargs['stdout'] = DEVNULL
+            kwargs['stderr'] = subprocess.STDOUT
+        return subprocess.call(shlex.split(self.test), **kwargs) == 0
 
     def backup_create(self):
         """Backs up entire configuration."""
@@ -173,7 +177,8 @@ class ReloadConf(object):
                 shutil.move(src, dst)
             # We have now merged in our new configuration files, lets test this
             # config.
-            if self.test_command():
+            quiet = False if new_config else True
+            if self.test_command(quiet=quiet):
                 LOGGER.debug('Configuration good, reloading')
                 if self.check_command():
                     self.reload_command()
