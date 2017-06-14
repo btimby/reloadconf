@@ -177,8 +177,7 @@ class ReloadConf(object):
                 shutil.move(src, dst)
             # We have now merged in our new configuration files, lets test this
             # config.
-            quiet = False if new_config else True
-            if self.test_command(quiet=quiet):
+            if self.test_command(quiet=False):
                 LOGGER.debug('Configuration good, reloading')
                 if self.check_command():
                     self.reload_command()
