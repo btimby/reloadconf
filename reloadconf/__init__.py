@@ -107,8 +107,6 @@ class ReloadConf(object):
                              'found')
                 # If command is not running and config is valid, start command.
                 self.start_command()
-            else:
-                LOGGER.debug('Nothing to do')
 
     def test_command(self, quiet=True):
         """Run test command to verify configuration."""
