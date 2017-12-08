@@ -187,6 +187,6 @@ class ReloadConf(object):
             else:
                 LOGGER.info('Configuration bad, restoring')
                 self.backup_restore(prev_config)
-        except:
+        except Exception:
             LOGGER.exception('Failure, restoring config', exc_info=True)
             self.backup_restore(prev_config)

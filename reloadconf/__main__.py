@@ -72,7 +72,7 @@ def main(opt):
     while True:
         try:
             control.poll()
-        except:
+        except Exception:
             LOGGER.exception('Error polling', exc_info=True)
         # Check 20 times a minute.
         time.sleep(3.0)
