@@ -15,7 +15,7 @@ from unittest import skipIf
 
 from os.path import exists as pathexists
 from os.path import join as pathjoin
-from os.path import basename
+from os.path import basename, isdir
 
 from reloadconf import ReloadConf
 from reloadconf.__main__ import main
@@ -200,9 +200,11 @@ class TestReloadConf(unittest.TestCase):
     def test_nodir(self):
         """Test that watch directory does not need to exist."""
         os.rmdir(self.dir)
-        with ReloadConf(self.dir, self.file, '/bin/sleep 1') as rc:
+        with ReloadConf(self.dir, self.file, '/bin/sleep 1',
+                        chown=(TEST_UID, TEST_UID), chmod=0o700) as rc:
             rc.poll()
             self.assertTrue(rc.check_command())
+            self.assertTrue(isdir(self.dir))
 
     def test_main(self):
         """Test that reloadconf blocks on command."""
