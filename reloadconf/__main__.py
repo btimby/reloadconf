@@ -20,15 +20,17 @@ def validate_opts(opts):
     assert opts.get('command', '').strip(), "empty command opt"
     assert opts.get('watch', '').strip(), "empty watch opt"
     # others
-    addr = opts.get('wait_for_socket')
+    addr = opts.get('wait_for_sock')
     if addr:
-        assert addr.count(':') == 1, addr
+        assert addr.count(':') == 1, "invalid address %r" % addr
         host, port = addr.split(':')
-        assert int(port) > 0, addr
-        assert int(port) < 65536, addr
+        assert port.isdigit(), "invalid port" % port
+        assert int(port) > 0, "invalid port %r" % port
+        assert int(port) < 65536, "invalid port %r" % port
     timeout = opts.get('wait_timeout')
     if timeout:
-        assert int(timeout) > 0, timeout
+        assert timeout.isdigit(), "invalid timeout %r" % timeout
+        assert int(timeout) > 0, "invalid timeout %r" % timeout
 
 
 def main(opt):
@@ -37,8 +39,8 @@ def main(opt):
 
     Usage:
         reloadconf --command=<cmd> --watch=<dir> (--config=<file> ...)
-                   [--reload=<cmd> --test=<cmd> --wait-for-file=<file>
-                    --wait-for-socket=<host:port> --wait-timeout=<secs> --debug]
+                   [--reload=<cmd> --test=<cmd> --wait-for-path=<file>
+                    --wait-for-sock=<host:port> --wait-timeout=<secs> --debug]
 
     Options:
         --command=<cmd>  The program to run when configuration is valid.
@@ -47,9 +49,9 @@ def main(opt):
         --reload=<cmd>   The command to reload configuration (defaults to HUP
                          signal).
         --test=<cmd>     The command to test configuration.
-        --wait-for-file=<file>
+        --wait-for-path=<file>
                          Delay start until file or directory appears on disk.
-        --wait-for-socket=<host:port>
+        --wait-for-sock=<host:port>
                          Delay start until connection succeeds.
         --wait-timeout=<secs>
                          Timeout for wait-* commands [default: 5].

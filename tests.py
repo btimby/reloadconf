@@ -42,6 +42,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class TestReloadConf(unittest.TestCase):
+
     @classmethod
     def setUp(cls):
         cls.dir = tempfile.mkdtemp()
@@ -63,6 +64,43 @@ class TestReloadConf(unittest.TestCase):
             shutil.rmtree(cls.dir)
         except IOError:
             pass
+
+    def run_cli(self, watch=None, config=None, command=None, test=None,
+                others=None):
+        """Helper to run realoadconf as if it were run from the cmdline."""
+        if watch is None:
+            watch = '--watch=%s' % self.dir
+        if config is None:
+            config = '--config=%s' % self.file
+        if command is None:
+            command = '--command=/bin/sleep 1'
+        if test is None:
+            test = '--test=/bin/true'
+
+        sysargv = sys.argv
+
+        try:
+            sys.argv = [
+                'reloadconf',
+                watch,
+                config,
+                command,
+                test,
+            ]
+
+            if others:
+                assert isinstance(others, list), others
+                sys.argv.extend(others)
+
+            for x in sys.argv:
+                assert isinstance(x, str), x
+
+            # run
+            import reloadconf.__main__  # NOQA
+        finally:
+            sys.argv = sysargv
+
+    # ---
 
     def test_fail(self):
         """Ensure command is NOT run when test fails."""
@@ -163,6 +201,17 @@ class TestReloadConf(unittest.TestCase):
 
         finally:
             sys.argv = sysargv
+
+    def test_wait_timeout(self):
+        with self.assertRaises(AssertionError) as exc:
+            self.run_cli(others=['--wait-timeout=-1'])
+        self.assertEqual(exc.exception.message, "invalid timeout '-1'")
+
+        with self.assertRaises(AssertionError) as exc:
+            self.run_cli(others=['--wait-timeout=string'])
+        self.assertEqual(exc.exception.message, "invalid timeout 'string'")
+
+
 
 if __name__ == '__main__':
     unittest.main()

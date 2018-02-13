@@ -1,4 +1,5 @@
 PYTHON = python
+ARGS ?=
 
 coverage:
 	$(PYTHON) -m coverage run tests.py
@@ -10,6 +11,10 @@ install:
 
 test:
 	$(PYTHON) tests.py
+
+# E.g. make test-by-name ARGS=tests.TestReloadConf.test_wait_timeout
+test-by-name:
+	$(PYTHON) -m unittest -v $(ARGS)
 
 lint:
 	$(PYTHON) -m flake8 reloadconf

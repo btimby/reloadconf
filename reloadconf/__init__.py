@@ -57,7 +57,7 @@ class ReloadConf(object):
     """
 
     def __init__(self, watch, config, command, reload=None, test=None,
-                 wait_for_file=None, wait_for_socket=None, wait_timeout=None):
+                 wait_for_path=None, wait_for_sock=None, wait_timeout=None):
         if isinstance(config, str):
             config = (config,)
         self.watch = watch
@@ -65,8 +65,8 @@ class ReloadConf(object):
         self.command = command
         self.reload = reload
         self.test = test
-        self.wait_for_file = wait_for_file
-        self.wait_for_socket = wait_for_socket
+        self.wait_for_path = wait_for_path
+        self.wait_for_sock = wait_for_sock
         self.wait_timeout = wait_timeout
         # Extract names for use later.
         self.watch_names = [basename(f) for f in self.config]
@@ -101,17 +101,17 @@ class ReloadConf(object):
         """Return False if command is dead, otherwise True."""
         return self.process is not None and self.process.poll() is None
 
-    def _wait_for_file(self):
+    def _wait_for_path(self):
         giveup_at = time.time() + int(self.wait_timeout)
         while time.time() <= giveup_at:
-            if os.path.exists(self.wait_for_file):
+            if os.path.exists(self.wait_for_path):
                 return
             time.sleep(0.1)
         raise RuntimeError("file %r still does not exist after %s secs" % (
-                           self.wait_for_file, self.wait_timeout))
+                           self.wait_for_path, self.wait_timeout))
 
-    def _wait_for_socket(self):
-        host, port = self.wait_for_socket.split(':')
+    def _wait_for_sock(self):
+        host, port = self.wait_for_sock.split(':')
         port = int(port)
         addr = (host, port)
         err = None
@@ -128,13 +128,13 @@ class ReloadConf(object):
             finally:
                 s.close()
         raise RuntimeError("can't connect to %s after %s secs; reason: %r" % (
-                           self.wait_for_socket, self.wait_timeout, err))
+                           self.wait_for_sock, self.wait_timeout, err))
 
     def wait_for_stuff(self):
-        if self.wait_for_file:
-            self._wait_for_file()
-        if self.wait_for_socket:
-            self._wait_for_socket()
+        if self.wait_for_path:
+            self._wait_for_path()
+        if self.wait_for_sock:
+            self._wait_for_sock()
 
     def poll(self):
         """Processing loop."""
