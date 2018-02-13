@@ -256,6 +256,20 @@ class TestReloadConf(TestCase):
             self.run_cli(others=['--wait-for-sock=localhost:65000',
                                  '--wait-timeout=0.1'])
 
+    def test_wait_for_sock_ok(self):
+        class Sentinal(Exception):
+            pass
+
+        def _alarm(*args):
+            raise Sentinal()
+
+        signal.signal(signal.SIGALRM, _alarm)
+        signal.alarm(1)
+
+        with self.assertRaises(Sentinal):
+            self.run_cli(others=['--wait-for-sock=google.com:80',
+                                 '--wait-timeout=3'])
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
