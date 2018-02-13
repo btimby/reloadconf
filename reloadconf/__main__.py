@@ -33,7 +33,7 @@ def validate_opts(opts):
             float(timeout)
         except ValueError:
             assert 0, "invalid timeout %r" % timeout
-        assert int(timeout) > 0, "invalid timeout %r" % timeout
+        assert float(timeout) > 0, "invalid timeout %r" % timeout
 
 
 def main(opt):

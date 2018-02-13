@@ -1,12 +1,14 @@
 from __future__ import absolute_import
 
+import errno
+import logging
 import os
 import shutil
 import signal
+import stat
 import sys
 import tempfile
 import time
-import logging
 import unittest
 
 from os.path import exists as pathexists
@@ -14,6 +16,11 @@ from os.path import join as pathjoin
 from os.path import basename
 
 from reloadconf import ReloadConf
+from reloadconf import TimeoutExpired
+
+
+# Test file name used during tests.
+TESTFN = "rconf-testfile"
 
 # Program to indicate HUP signal received.
 TEST_PROGRAM = b"""#!/usr/bin/env python
@@ -57,6 +64,19 @@ class TestCase(unittest.TestCase):
         return None
 
 
+def safe_rmpath(path):
+    "Convenience function for removing temporary test files or dirs"
+    try:
+        st = os.stat(path)
+        if stat.S_ISDIR(st.st_mode):
+            os.rmdir(path)
+        else:
+            os.remove(path)
+    except OSError as err:
+        if err.errno != errno.ENOENT:
+            raise
+
+
 class TestReloadConf(TestCase):
 
     @classmethod
@@ -68,14 +88,13 @@ class TestReloadConf(TestCase):
             p.write(TEST_PROGRAM)
             cls.prog = p.name
         os.chmod(cls.prog, 0o700)
+        safe_rmpath(TESTFN)
 
     @classmethod
     def tearDown(cls):
-        for path in (cls.file, cls.prog):
-            try:
-                os.remove(path)
-            except IOError:
-                pass
+        safe_rmpath(TESTFN)
+        safe_rmpath(cls.file)
+        safe_rmpath(cls.prog)
         try:
             shutil.rmtree(cls.dir)
         except IOError:
@@ -209,6 +228,33 @@ class TestReloadConf(TestCase):
         with self.assertRaises(AssertionError) as exc:
             self.run_cli(others=['--wait-timeout=string'])
         self.assertEqual(exc.exception.message, "invalid timeout 'string'")
+
+    def test_wait_for_path_fail(self):
+        with self.assertRaises(TimeoutExpired):
+            self.run_cli(others=['--wait-for-path=non-existent-file',
+                                 '--wait-timeout=0.1'])
+
+    def test_wait_for_path_ok(self):
+        class Sentinal(Exception):
+            pass
+
+        def _alarm(*args):
+            raise Sentinal()
+
+        signal.signal(signal.SIGALRM, _alarm)
+        signal.alarm(1)
+
+        with open(TESTFN, "w"):
+            pass
+
+        with self.assertRaises(Sentinal):
+            self.run_cli(others=['--wait-for-path=' + TESTFN,
+                                 '--wait-timeout=0.1'])
+
+    def test_wait_for_sock_fail(self):
+        with self.assertRaises(TimeoutExpired):
+            self.run_cli(others=['--wait-for-sock=localhost:65000',
+                                 '--wait-timeout=0.1'])
 
 
 if __name__ == '__main__':

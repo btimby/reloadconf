@@ -21,6 +21,10 @@ LOGGER.addHandler(logging.NullHandler())
 DEVNULL = open(os.devnull, 'w')
 
 
+class TimeoutExpired(Exception):
+    pass
+
+
 def checksum(path):
     """
     Calculate a checksum for the given path.
@@ -82,6 +86,7 @@ class ReloadConf(object):
         self.watch_names = [basename(f) for f in self.config]
         # The process (once started).
         self.process = None
+        self.wait_for_stuff()
 
     def start_command(self, wait_for_config=True):
         p = self.process = subprocess.Popen(shlex.split(self.command))
@@ -117,8 +122,8 @@ class ReloadConf(object):
             if os.path.exists(self.wait_for_path):
                 return
             time.sleep(0.1)
-        raise RuntimeError("file %r still does not exist after %s secs" % (
-                           self.wait_for_path, self.wait_timeout))
+        raise TimeoutExpired("file %r still does not exist after %s secs" % (
+                             self.wait_for_path, self.wait_timeout))
 
     def _wait_for_sock(self):
         host, port = self.wait_for_sock.split(':')
@@ -137,8 +142,8 @@ class ReloadConf(object):
                 return
             finally:
                 s.close()
-        raise RuntimeError("can't connect to %s after %s secs; reason: %r" % (
-                           self.wait_for_sock, self.wait_timeout, err))
+        raise TimeoutExpired("can't connect to %s after %s secs; reason: %r" % (
+                             self.wait_for_sock, self.wait_timeout, err))
 
     def wait_for_stuff(self):
         if self.wait_for_path:
@@ -149,7 +154,6 @@ class ReloadConf(object):
     def poll(self):
         """Processing loop."""
         # First attempt to install a new config.
-        self.wait_for_stuff()
         files = os.listdir(self.watch)
         new_config = set()
         for i in range(2):
