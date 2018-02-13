@@ -21,12 +21,14 @@ def main(opt):
 
     Usage:
         reloadconf --command=<cmd> --watch=<dir> (--config=<file> ...)
-                   [--test=<cmd> --debug]
+                   [--reload=<cmd> --test=<cmd> --debug]
 
     Options:
         --command=<cmd>  The program to run when configuration is valid.
         --watch=<dir>    The directory to watch for incoming files.
         --config=<file>  A destination config file path.
+        --reload=<cmd>   The command to reload configuration (defaults to HUP
+                         signal).
         --test=<cmd>     The command to test configuration.
         --debug          Verbose output.
 
@@ -58,12 +60,9 @@ def main(opt):
     """
 
     # Convert from CLI arguments to kwargs.
-    kwargs = {
-        'watch': opt['--watch'],
-        'test': opt['--test'],
-        'command': opt['--command'],
-        'config': opt['--config'],
-    }
+    kwargs = {}
+    for k in opt.keys():
+        kwargs[k.lstrip('-')] = opt[k]
 
     control = ReloadConf(**kwargs)
     LOGGER.info('Reloadconf monitoring %s for %s', kwargs['watch'],

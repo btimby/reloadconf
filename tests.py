@@ -65,13 +65,13 @@ class TestReloadConf(unittest.TestCase):
             pass
 
     def test_fail(self):
-        rc = ReloadConf(self.dir, self.file, '/bin/sleep 1', '/bin/false')
+        rc = ReloadConf(self.dir, self.file, '/bin/sleep 1', test='/bin/false')
         rc.poll()
         # Command should NOT have run.
         self.assertFalse(rc.check_command())
 
     def test_success(self):
-        rc = ReloadConf(self.dir, self.file, '/bin/sleep 1', '/bin/true')
+        rc = ReloadConf(self.dir, self.file, '/bin/sleep 1', test='/bin/true')
         rc.poll()
         # Command should have run.
         self.assertTrue(rc.check_command())

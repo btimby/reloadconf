@@ -55,12 +55,13 @@ class ReloadConf(object):
       E. If test fails, revert config.
     """
 
-    def __init__(self, watch, config, command, test=None):
+    def __init__(self, watch, config, command, reload=None, test=None):
         if isinstance(config, str):
             config = (config,)
         self.watch = watch
         self.config = set(config)
         self.command = command
+        self.reload = reload
         self.test = test
         # Extract names for use later.
         self.watch_names = [basename(f) for f in self.config]
@@ -72,10 +73,21 @@ class ReloadConf(object):
         LOGGER.info('Command (%s) started with pid %s', self.command, p.pid)
 
     def reload_command(self):
-        assert self.process is not None, 'Command not started'
-        assert self.process.poll() is None, 'Command dead'
-        self.process.send_signal(signal.SIGHUP)
-        LOGGER.info('Sent process HUP signal')
+        """
+        Reload configuration.
+
+        If reload command is given, run that, otherwise, signal process with
+        HUP.
+        """
+        if self.reload is None:
+            assert self.process is not None, 'Command not started'
+            assert self.process.poll() is None, 'Command dead'
+            self.process.send_signal(signal.SIGHUP)
+            LOGGER.info('Sent process HUP signal')
+
+        else:
+            subprocess.call(shlex.split(self.reload))
+            LOGGER.info('Executed reload command')
 
     def check_command(self):
         """Return False if command is dead, otherwise True."""
