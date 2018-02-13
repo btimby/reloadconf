@@ -154,7 +154,7 @@ class ReloadConf(object):
             try:
                 files = os.listdir(self.watch)
 
-            except IOError as e:
+            except OSError as e:
                 # Watch dir may not exist, that is OK, this just means there is
                 # no new config yet.
                 if e.errno != errno.ENOENT:
