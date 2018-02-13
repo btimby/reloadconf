@@ -144,7 +144,7 @@ class TestReloadConf(unittest.TestCase):
         """Test chown validation."""
         # Ensure chown must have len() == 2:
         with self.assertRaises(AssertionError):
-            ReloadConf(None, [], None, chown=(1, 2, 3))
+            ReloadConf(self.dir, [], None, chown=(1, 2, 3))
 
     def test_chown_user(self):
         """Test chown argument handling (user only)."""
@@ -171,7 +171,7 @@ class TestReloadConf(unittest.TestCase):
         """Test chmod capability."""
         # Ensure chmod must be numeric:
         with self.assertRaises(AssertionError):
-            ReloadConf(None, [], None, chmod='foo')
+            ReloadConf(self.dir, [], None, chmod='foo')
         # Ensure config files are properly chmod()ed:
         rc = ReloadConf(self.dir, self.file, '/bin/true', chmod=0o700)
         watch = pathjoin(self.dir, basename(self.file))
