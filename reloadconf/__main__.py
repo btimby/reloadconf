@@ -30,6 +30,12 @@ def main(opt):
         --reload=<cmd>   The command to reload configuration (defaults to HUP
                          signal).
         --test=<cmd>     The command to test configuration.
+        --wait-for-file=<file>
+                         Delay start until file appears on disk.
+        --wait-for-socket=<host:port>
+                         Delay start until connection succeeds.
+        --wait-timeout=<secs>
+                         Timeout for wait-* commands [default: 5].
         --debug          Verbose output.
 
     Assumptions:
