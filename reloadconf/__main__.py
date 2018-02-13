@@ -55,7 +55,7 @@ def main(opt):
         --wait-for-path=<file>
                          Delay start until file or directory appears on disk.
         --wait-for-sock=<host:port>
-                         Delay start until connection succeeds.
+                         Delay start until TCP connection succeeds.
         --wait-timeout=<secs>
                          Timeout for wait-* commands [default: 5].
         --debug          Verbose output.

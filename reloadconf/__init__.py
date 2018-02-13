@@ -19,6 +19,7 @@ from hashlib import md5
 LOGGER = logging.getLogger(__name__)
 LOGGER.addHandler(logging.NullHandler())
 DEVNULL = open(os.devnull, 'w')
+DEFAULT_TIMEOUT = 5
 
 
 class TimeoutExpired(Exception):
@@ -76,7 +77,7 @@ class ReloadConf(object):
         self.chmod = chmod
         self.wait_for_path = wait_for_path
         self.wait_for_sock = wait_for_sock
-        self.wait_timeout = wait_timeout
+        self.wait_timeout = wait_timeout or DEFAULT_TIMEOUT
         if self.wait_timeout and isinstance(self.wait_timeout, str):
             if '.' in self.wait_timeout:
                 self.wait_timeout = float(self.wait_timeout)
@@ -250,7 +251,6 @@ class ReloadConf(object):
 
             if self.chmod is not None:
                 os.chmod(dst, self.chmod)
-
 
     def test_and_swap(self, config):
         """Backup old config, write new config, test config, HUP or restore."""
