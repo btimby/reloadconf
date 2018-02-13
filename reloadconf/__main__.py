@@ -65,8 +65,6 @@ def main(opt):
     space before moving them into the input directory.
     """
 
-
-
     # Convert from CLI arguments to kwargs.
     kwargs = {}
     for k in opt.keys():

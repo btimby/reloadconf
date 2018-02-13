@@ -241,7 +241,6 @@ class ReloadConf(object):
             if self.chmod is not None:
                 os.chmod(dst, self.chmod)
 
-
     def test_and_swap(self, config):
         """Backup old config, write new config, test config, HUP or restore."""
         LOGGER.info('Attempting to apply new configuration')
