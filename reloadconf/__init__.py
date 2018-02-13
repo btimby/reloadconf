@@ -12,6 +12,8 @@ import numbers
 import pwd
 import grp
 
+from six import PY3
+
 from os.path import basename, dirname, isfile
 from os.path import join as pathjoin
 from os.path import exists as pathexists
@@ -200,7 +202,20 @@ class ReloadConf(object):
         flag, i = self.inotify
 
         if flag:
-            return [fn for (_, _, _, fn) in i.event_gen(1, yield_nones=False)]
+            kwargs = {}
+
+            if PY3:
+                kwargs['timeout_s'] = 0
+
+            filenames = []
+
+            for event in i.event_gen(**kwargs):
+                if event is None:
+                    break
+
+                filenames.append(event[3])
+
+            return filenames
 
         else:
             return os.listdir(self.watch)
