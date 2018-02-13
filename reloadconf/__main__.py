@@ -8,7 +8,7 @@ import logging
 import textwrap
 
 from docopt import docopt, DocoptExit
-from schema import Schema, Use, Or, And, SchemaError
+from schema import Schema, Use, Or, SchemaError
 
 from reloadconf import ReloadConf
 
