@@ -7,6 +7,7 @@ import time
 import logging
 
 from docopt import docopt
+from schema import Schema, Use, Or
 
 from reloadconf import ReloadConf
 
@@ -21,16 +22,21 @@ def main(opt):
 
     Usage:
         reloadconf --command=<cmd> --watch=<dir> (--config=<file> ...)
-                   [--reload=<cmd> --test=<cmd> --debug]
+                   [--reload=<cmd> --test=<cmd> --debug --chown=<user,group>]
+                   [--chmod=<mode>]
 
     Options:
-        --command=<cmd>  The program to run when configuration is valid.
-        --watch=<dir>    The directory to watch for incoming files.
-        --config=<file>  A destination config file path.
-        --reload=<cmd>   The command to reload configuration (defaults to HUP
-                         signal).
-        --test=<cmd>     The command to test configuration.
-        --debug          Verbose output.
+        --command=<cmd>         The program to run when configuration is valid.
+        --watch=<dir>           The directory to watch for incoming files.
+        --config=<file>         A destination config file path.
+        --reload=<cmd>          The command to reload configuration (defaults
+                                to HUP signal).
+        --test=<cmd>            The command to test configuration.
+        --chown=<user[,group]>  The user and (optionally) group to chown config
+                                files to before starting service.
+        --chmod=<mode>          Mode to set config files to before starting
+                                service.
+        --debug                 Verbose output.
 
     Assumptions:
      - The command accepts HUP signal to reload it's configuration.
@@ -59,6 +65,8 @@ def main(opt):
     space before moving them into the input directory.
     """
 
+
+
     # Convert from CLI arguments to kwargs.
     kwargs = {}
     for k in opt.keys():
@@ -78,6 +86,12 @@ def main(opt):
 
 
 opt = docopt(main.__doc__)
+
+opt = Schema({
+    '--chown': Or(None, Use(lambda v: tuple(v.split(',')))),
+
+    object: object,
+}).validate(opt)
 
 logger = logging.getLogger()
 # Set up logging so we can see output.
