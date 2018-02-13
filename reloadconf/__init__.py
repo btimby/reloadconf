@@ -55,12 +55,13 @@ class ReloadConf(object):
       E. If test fails, revert config.
     """
 
-    def __init__(self, watch, config, command, test=None):
+    def __init__(self, watch, config, command, reload=None, test=None):
         if isinstance(config, str):
             config = (config,)
         self.watch = watch
         self.config = set(config)
         self.command = command
+        self.reload = reload
         self.test = test
         # Extract names for use later.
         self.watch_names = [basename(f) for f in self.config]
@@ -72,10 +73,24 @@ class ReloadConf(object):
         LOGGER.info('Command (%s) started with pid %s', self.command, p.pid)
 
     def reload_command(self):
-        assert self.process is not None, 'Command not started'
-        assert self.process.poll() is None, 'Command dead'
-        self.process.send_signal(signal.SIGHUP)
-        LOGGER.info('Sent process HUP signal')
+        """
+        Reload configuration.
+
+        If reload command is given, run that, otherwise, signal process with
+        HUP.
+        """
+        if self.reload is None:
+            if not self.check_command():
+                LOGGER.info('Command dead, restarting...')
+                self.start_command(wait_for_config=False)
+
+            else:
+                LOGGER.info('Sending HUP signal...')
+                self.process.send_signal(signal.SIGHUP)
+
+        else:
+            LOGGER.info('Executing reload command...')
+            subprocess.call(shlex.split(self.reload))
 
     def check_command(self):
         """Return False if command is dead, otherwise True."""
@@ -179,10 +194,7 @@ class ReloadConf(object):
             # config.
             if self.test_command(quiet=False):
                 LOGGER.debug('Configuration good, reloading')
-                if self.check_command():
-                    self.reload_command()
-                else:
-                    self.start_command(wait_for_config=False)
+                self.reload_command()
                 self.backup_remove(prev_config)
             else:
                 LOGGER.info('Configuration bad, restoring')

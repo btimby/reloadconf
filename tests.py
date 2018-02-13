@@ -65,24 +65,28 @@ class TestReloadConf(unittest.TestCase):
             pass
 
     def test_fail(self):
-        rc = ReloadConf(self.dir, self.file, '/bin/sleep 1', '/bin/false')
+        """Ensure command is NOT run when test fails."""
+        rc = ReloadConf(self.dir, self.file, '/bin/sleep 1', test='/bin/false')
         rc.poll()
         # Command should NOT have run.
         self.assertFalse(rc.check_command())
 
     def test_success(self):
-        rc = ReloadConf(self.dir, self.file, '/bin/sleep 1', '/bin/true')
+        """Ensure command is run when test succeeds."""
+        rc = ReloadConf(self.dir, self.file, '/bin/sleep 1', test='/bin/true')
         rc.poll()
         # Command should have run.
         self.assertTrue(rc.check_command())
 
     def test_no_test(self):
+        """Ensure command is run when test is omitted."""
         rc = ReloadConf(self.dir, self.file, '/bin/sleep 1')
         rc.poll()
         # Command should have run.
         self.assertTrue(rc.check_command())
 
     def test_hup(self):
+        """Ensure command is reloaded with valid config."""
         command = '%s %s' % (self.prog, self.sig)
         rc = ReloadConf(self.dir, self.file, command)
         rc.poll()
@@ -96,7 +100,24 @@ class TestReloadConf(unittest.TestCase):
         time.sleep(0.1)
         self.assertTrue(pathexists(self.sig))
 
+    def test_reload(self):
+        """Ensure reload command is run (instead of HUP) when provided."""
+        reload = '/bin/touch %s' % self.sig
+        rc = ReloadConf(self.dir, self.file, '/bin/sleep 1', reload=reload)
+        rc.poll()
+        # Command should now be running.
+        self.assertTrue(rc.check_command())
+        self.assertFalse(pathexists(self.sig))
+        # Write out "config" file.
+        with open(pathjoin(self.dir, basename(self.file)), 'wb') as f:
+            f.write(b'foo')
+        # Reload command should be executed.
+        rc.poll()
+        time.sleep(0.1)
+        self.assertTrue(pathexists(self.sig))
+
     def test_nohup(self):
+        """Ensure that command is not reloaded with invalid config."""
         command = '%s %s' % (self.prog, self.sig)
         rc = ReloadConf(self.dir, self.file, command, '/bin/true')
         rc.poll()
@@ -113,7 +134,9 @@ class TestReloadConf(unittest.TestCase):
         self.assertFalse(pathexists(self.sig))
 
     def test_main(self):
-        class Sentinal(Exception): pass
+        """Test that reloadconf blocks on command."""
+        class Sentinal(Exception):
+            pass
 
         def _alarm(*args):
             raise Sentinal()
@@ -137,6 +160,7 @@ class TestReloadConf(unittest.TestCase):
                 self.fail('Should never reach this')
             except Sentinal:
                 pass
+
         finally:
             sys.argv = sysargv
 
