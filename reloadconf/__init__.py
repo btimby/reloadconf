@@ -68,6 +68,11 @@ class ReloadConf(object):
         self.wait_for_path = wait_for_path
         self.wait_for_sock = wait_for_sock
         self.wait_timeout = wait_timeout
+        if self.wait_timeout and isinstance(self.wait_timeout, str):
+            if '.' in self.wait_timeout:
+                self.wait_timeout = float(self.wait_timeout)
+            else:
+                self.wait_timeout = int(self.wait_timeout)
         # Extract names for use later.
         self.watch_names = [basename(f) for f in self.config]
         # The process (once started).
@@ -102,7 +107,7 @@ class ReloadConf(object):
         return self.process is not None and self.process.poll() is None
 
     def _wait_for_path(self):
-        giveup_at = time.time() + int(self.wait_timeout)
+        giveup_at = time.time() + self.wait_timeout
         while time.time() <= giveup_at:
             if os.path.exists(self.wait_for_path):
                 return

@@ -29,7 +29,10 @@ def validate_opts(opts):
         assert int(port) < 65536, "invalid port %r" % port
     timeout = opts.get('wait_timeout')
     if timeout:
-        assert timeout.isdigit(), "invalid timeout %r" % timeout
+        try:
+            float(timeout)
+        except ValueError:
+            assert 0, "invalid timeout %r" % timeout
         assert int(timeout) > 0, "invalid timeout %r" % timeout
 
 
