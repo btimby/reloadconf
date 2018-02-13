@@ -59,7 +59,7 @@ class ReloadConf(object):
     """
 
     def __init__(self, watch, config, command, reload=None, test=None,
-                 chown=None, chmod=None):
+                 chown=None, chmod=None, inotify=False):
         if isinstance(config, str):
             config = (config,)
         self.watch = watch
@@ -70,8 +70,21 @@ class ReloadConf(object):
         self.chown, self.chmod = self._setup_permissions(chown, chmod)
         # Extract names for use later.
         self.watch_names = [basename(f) for f in self.config]
+        self.inotify = self._setup_inotify(inotify)
         # The process (once started).
         self.process = None
+
+    def _setup_inotify(self, flag):
+        if not flag:
+            return
+
+        try:
+            import inotify.adapters
+        except ImportError:
+            raise AssertionError('cannot use inotify, package not installed')
+
+        paths = [pathjoin(self.watch, fn) for fn in self.watch_names]
+        return inotify.adapters.Inotify(paths)
 
     def _setup_permissions(self, chown, chmod):
         if chown is not None:
@@ -141,35 +154,55 @@ class ReloadConf(object):
         """Return False if command is dead, otherwise True."""
         return self.process is not None and self.process.poll() is None
 
+    def get_config(self):
+        config = set()
+
+        if self.inotify is not None:
+            # Avoid filesystem polling if inotify is in use.
+            config.update([fn for (_, _, _, fn) in self.inotify.event_gen()])
+
+        else:
+            while True:
+                # Check for (new) config files:
+                try:
+                    files = os.listdir(self.watch)
+
+                except OSError as e:
+                    # Watch dir may not exist, that is OK, this just means
+                    # there is no new config yet.
+                    if e.errno != errno.ENOENT:
+                        raise
+                    break
+
+                for fn in files:
+                    if fn not in self.watch_names:
+                        files.remove(fn)
+                    if fn in config:
+                        files.remove(fn)
+
+                # If we did not find any new config files, exit loop.
+                if not files:
+                    break
+
+                # Save the config files we found, sleep, then look again.
+                config.update(files)
+
+                # Sleep a bit to allow for settling. We loop until no new
+                # config files are found.
+                time.sleep(1.0)
+        
+        return config
+
     def poll(self):
         """Processing loop."""
         # First attempt to install a new config.
-        new_config = set()
-        while True:
-            # Check for (new) config files:
-            files = os.listdir(self.watch)
-            for fn in files:
-                if fn not in self.watch_names:
-                    files.remove(fn)
-                if fn in new_config:
-                    files.remove(fn)
+        config = self.get_config()
 
-            # If we did not find any new config files, exit loop.
-            if not files:
-                break
-
-            # Save the config files we found, sleep, then look again.
-            new_config.update(files)
-
-            # Sleep a bit to allow for settling. We loop until no new config
-            # files are found.
-            time.sleep(1.0)
-
-        if new_config:
-            LOGGER.info('New configuration found %s', ', '.join(new_config))
+        if config:
+            LOGGER.info('New configuration found %s', ', '.join(config))
             # TODO: compare new config checksums with old to see if there are
             # really changes.
-            self.test_and_swap(new_config)
+            self.test_and_swap(config)
 
         elif not self.check_command():
             if self.test_command():
