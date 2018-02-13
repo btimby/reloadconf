@@ -12,8 +12,9 @@ import numbers
 import pwd
 import grp
 
-from os.path import basename, dirname
+from os.path import basename, dirname, isfile
 from os.path import join as pathjoin
+from os.path import exists as pathexists
 from os.path import splitext
 from hashlib import md5
 
@@ -62,6 +63,9 @@ class ReloadConf(object):
                  chown=None, chmod=None):
         if isinstance(config, str):
             config = (config,)
+        if not pathexists(watch):
+            LOGGER.warning('watch dir %s does not exist', watch)
+        assert not isfile(watch), 'watch dir is a file'
         self.watch = watch
         self.config = set(config)
         self.command = command
@@ -147,7 +151,16 @@ class ReloadConf(object):
         new_config = set()
         while True:
             # Check for (new) config files:
-            files = os.listdir(self.watch)
+            try:
+                files = os.listdir(self.watch)
+
+            except OSError as e:
+                # Watch dir may not exist, that is OK, this just means there is
+                # no new config yet.
+                if e.errno != errno.ENOENT:
+                    raise
+                break
+
             for fn in files:
                 if fn not in self.watch_names:
                     files.remove(fn)
