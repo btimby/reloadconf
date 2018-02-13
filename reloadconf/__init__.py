@@ -57,7 +57,8 @@ class ReloadConf(object):
     """
 
     def __init__(self, watch, config, command, reload=None, test=None,
-                 wait_for_path=None, wait_for_sock=None, wait_timeout=None):
+                 wait_for_path=None, wait_for_sock=None, wait_timeout=None,
+                 chown=None, chmod=None):
         if isinstance(config, str):
             config = (config,)
         self.watch = watch
@@ -65,6 +66,10 @@ class ReloadConf(object):
         self.command = command
         self.reload = reload
         self.test = test
+        self.chown = chown
+        if self.chown is not None:
+            assert len(self.chown) == 2, 'Chown must be a tuple of (uid, gid)'
+        self.chmod = chmod
         self.wait_for_path = wait_for_path
         self.wait_for_sock = wait_for_sock
         self.wait_timeout = wait_timeout
@@ -181,70 +186,89 @@ class ReloadConf(object):
             kwargs['stderr'] = subprocess.STDOUT
         return subprocess.call(shlex.split(self.test), **kwargs) == 0
 
-    def backup_create(self):
+    def backup_config(self):
         """Backs up entire configuration."""
         prev_config = set()
-        for file in self.config:
-            backup = file + '.prev'
-            LOGGER.debug('Backing up %s to %s', file, backup)
+        for src in self.config:
+            dst = '%s.prev' % src
+            LOGGER.debug('Backing up %s to %s', src, dst)
+
             try:
-                shutil.copy(file, backup)
+                shutil.copy(src, dst)
+
             except IOError as e:
                 if e.errno != errno.ENOENT:
                     raise
+
                 # If the config file is missing, we can skip backing it up.
-                LOGGER.warning('File %s missing, skipping backup', file)
+                LOGGER.warning('File %s missing, skipping backup', src)
+
             else:
-                prev_config.add(backup)
+                prev_config.add(dst)
         return prev_config
 
-    def backup_remove(self, prev_config):
+    def remove_config(self, config):
         """Remove backup once command is restarted."""
-        for path in prev_config:
+        for fn in config:
             try:
-                os.remove(path)
-                LOGGER.debug('Removed backup: %s', path)
+                os.remove(fn)
+                LOGGER.debug('Removed backup: %s', fn)
+
             except IOError as e:
                 if e.errno != errno.ENOENT:
-                    LOGGER.warning('Could not remove backup: %s', path)
+                    LOGGER.warning('Could not remove backup: %s', fn)
 
-    def backup_restore(self, prev_config):
+    def restore_config(self, config):
         """Restores a previous config backup."""
-        for backup in prev_config:
+        for src in config:
             # Remove .prev
-            file = splitext(backup)[0]
-            LOGGER.debug('Restoring %s from %s', file, backup)
-            shutil.move(backup, file)
+            dst, _ = splitext(src)
+            LOGGER.debug('Restoring %s from %s', dst, src)
+            shutil.move(src, dst)
 
-    def test_and_swap(self, new_config):
+    def install_config(self, config):
+        """Copy new configuration to location service expects."""
+        for fn in config:
+            dst = [p for p in self.config if basename(p) == fn][0]
+            src = pathjoin(self.watch, fn)
+
+            try:
+                os.makedirs(dirname(dst))
+            except OSError as e:
+                if e.errno != errno.EEXIST:
+                    raise
+
+            LOGGER.debug('Overwriting %s with %s', src, dst)
+            shutil.move(src, dst)
+
+            if self.chown is not None:
+                os.chown(dst, *self.chown)
+
+            if self.chmod is not None:
+                os.chmod(dst, self.chmod)
+
+
+    def test_and_swap(self, config):
         """Backup old config, write new config, test config, HUP or restore."""
         LOGGER.info('Attempting to apply new configuration')
-        prev_config = self.backup_create()
+        backup = self.backup_config()
         # We have backed up ALL config files (not just the ones we might
         # replace). If any error occurs from here out, we will need to restore
         # our config, so we will use exception handling.
         try:
-            for file in new_config:
-                # Determine which file to overwrite (same names, different
-                # directories).
-                dst = [p for p in self.config if basename(p) == file][0]
-                src = pathjoin(self.watch, file)
-                try:
-                    os.makedirs(dirname(dst))
-                except OSError as e:
-                    if e.errno != errno.EEXIST:
-                        raise
-                LOGGER.debug('Overwriting %s with %s', src, dst)
-                shutil.move(src, dst)
+            self.install_config(config)
+
             # We have now merged in our new configuration files, lets test this
             # config.
             if self.test_command(quiet=False):
                 LOGGER.debug('Configuration good, reloading')
                 self.reload_command()
-                self.backup_remove(prev_config)
+                self.remove_config(backup)
+
             else:
                 LOGGER.info('Configuration bad, restoring')
-                self.backup_restore(prev_config)
+                self.restore_config(backup)
+
         except Exception:
             LOGGER.exception('Failure, restoring config', exc_info=True)
-            self.backup_restore(prev_config)
+            self.restore_config(backup)
