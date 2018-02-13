@@ -64,11 +64,11 @@ class TestReloadConf(unittest.TestCase):
         for path in (cls.file, cls.prog):
             try:
                 os.remove(path)
-            except IOError:
+            except OSError:
                 pass
         try:
             shutil.rmtree(cls.dir)
-        except IOError:
+        except OSError:
             pass
 
     def test_fail(self):
