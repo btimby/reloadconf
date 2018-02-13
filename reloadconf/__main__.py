@@ -18,18 +18,57 @@ LOGGER.addHandler(logging.NullHandler())
 
 
 def host_and_port(value):
+    """
+    Parse "host:port" string into (host, port) tuple.
+
+    >>> host_and_port('host:1')
+    ('host', 1)
+    >>> host_and_port(' host:1 ')
+    ('host', 1)
+    >>> host_and_port('host:foo')
+    Traceback (most recent call last):
+    File "<stdin>", line 1, in <module>
+    File "reloadconf/__main__.py", line 33, in host_and_port
+        return host.strip(), int(port.strip())
+    ValueError: invalid literal for int() with base 10: 'foo'
+    """
     host, port = value.split(':')
-    return host, int(port)
+
+    return host.strip(), int(port.strip())
 
 
 def user_and_group(value):
+    """
+    Parse "user,group" string into (user, group) tuple.
+
+    The group portion is optional in which case it will be None. Also, either
+    user or group could be integers.
+
+    >>> user_and_group('foo,bar')
+    ('foo', 'bar')
+    >>> user_and_group('foo')
+    ('foo', None)
+    >>> user_and_group('foo,1000')
+    ('foo', 1000)
+    >>> user_and_group(' 1000, 1000 ')
+    (1000, 1000)
+    """
     def _try_int(v):
         try:
             return int(v)
+
         except ValueError:
             return v
 
-    return tuple(map(_try_int, value.split(',')))
+    value = [_try_int(s.strip()) for s in value.split(',')]
+
+    if len(value) > 2:
+        raise AssertionError('Only two values accepted')
+
+    elif len(value) == 1:
+        value.append(None)
+
+    return tuple(value)
 
 
 def main(argv):
