@@ -34,7 +34,7 @@ def main(argv):
     Usage:
         reloadconf --command=<cmd> --watch=<dir> (--config=<file> ...)
                    [--reload=<cmd> --test=<cmd> --debug --chown=<user,group>]
-                   [--chmod=<mode>]
+                   [--chmod=<mode> --inotify]
 
     Options:
         --command=<cmd>       The program to run when configuration is valid.
@@ -47,6 +47,7 @@ def main(argv):
                               files to before starting service.
         --chmod=<mode>        Mode to set config files to before starting
                               service.
+        --inotify             Use inotify instead of polling.
         --debug               Verbose output.
 
     Assumptions:
@@ -97,19 +98,19 @@ def main(argv):
     for k in opt.keys():
         kwargs[k.lstrip('-')] = opt[k]
 
-    control = ReloadConf(**kwargs)
-    LOGGER.info('Reloadconf monitoring %s for %s', kwargs['watch'],
-                kwargs['command'])
+    with ReloadConf(**kwargs) as rc:
+        LOGGER.info('Reloadconf monitoring %s for %s', kwargs['watch'],
+                    kwargs['command'])
 
-    while True:
-        try:
-            control.poll()
+        while True:
+            try:
+                rc.poll()
 
-        except Exception:
-            LOGGER.exception('Error polling', exc_info=True)
+            except Exception:
+                LOGGER.exception('Error polling', exc_info=True)
 
-        # Check up to 20 times a minute.
-        time.sleep(3.0)
+            # Check up to 20 times a minute.
+            time.sleep(3.0)
 
 
 if __name__ == '__main__':

@@ -63,10 +63,6 @@ class ReloadConf(object):
                  chown=None, chmod=None, inotify=False):
         if isinstance(config, str):
             config = (config,)
-        if not pathexists(watch):
-            LOGGER.warning('watch dir %s does not exist', watch)
-        assert not isfile(watch), 'watch dir is a file'
-        self.watch = watch
         self.config = set(config)
         self.command = command
         self.reload = reload
@@ -74,23 +70,62 @@ class ReloadConf(object):
         self.chown, self.chmod = self._setup_permissions(chown, chmod)
         # Extract names for use later.
         self.watch_names = [basename(f) for f in self.config]
-        self.inotify = self._setup_inotify(inotify)
         # The process (once started).
         self.process = None
+        self.watch = self._setup_watch(watch)
+        self.inotify = self._setup_inotify(inotify)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.kill()
 
     def _setup_inotify(self, flag):
-        if not flag:
-            return
+        """Set up inotify if requested."""
+        i = None
 
-        try:
-            import inotify.adapters
-        except ImportError:
-            raise AssertionError('cannot use inotify, package not installed')
+        if flag:
+            try:
+                import inotify.adapters
 
-        paths = [pathjoin(self.watch, fn) for fn in self.watch_names]
-        return inotify.adapters.Inotify(paths)
+            except ImportError:
+                raise AssertionError(
+                    'cannot use inotify, package not installed')
+
+            else:
+                i = inotify.adapters.Inotify(paths=[self.watch],
+                                             block_duration_s=0)
+
+        return (flag, i)
+
+    def _setup_watch(self, watch):
+        """Create watch directory if it does not exist."""
+        assert not isfile(watch), 'watch dir is a file'
+
+        if pathexists(watch):
+            return watch
+
+        os.makedirs(watch)
+
+        if self.chown:
+            try:
+                os.chown(watch, *self.chown)
+
+            except OSError:
+                pass  # Non-fatal
+
+        if self.chmod:
+            try:
+                os.chmod(watch, self.chmod)
+
+            except OSError:
+                pass  # Non-fatal
+
+        return watch
 
     def _setup_permissions(self, chown, chmod):
+        """Set up for chown/chmod."""
         if chown is not None:
             if isinstance(chown, str):
                 user, group = chown, None
@@ -131,8 +166,10 @@ class ReloadConf(object):
         return chown, chmod
 
     def start_command(self, wait_for_config=True):
-        p = self.process = subprocess.Popen(shlex.split(self.command))
-        LOGGER.info('Command (%s) started with pid %s', self.command, p.pid)
+        """Run the service command."""
+        self.process = subprocess.Popen(shlex.split(self.command))
+        LOGGER.info(
+            'Command (%s) started with pid %s', self.command, self.process.pid)
 
     def reload_command(self):
         """
@@ -158,42 +195,39 @@ class ReloadConf(object):
         """Return False if command is dead, otherwise True."""
         return self.process is not None and self.process.poll() is None
 
-    def get_config(self):
-        config = set()
+    def get_config_files(self):
+        """Use polling method to enumerate files in watch dir."""
+        flag, i = self.inotify
 
-        if self.inotify is not None:
-            # Avoid filesystem polling if inotify is in use.
-            config.update([fn for (_, _, _, fn) in self.inotify.event_gen()])
+        if flag:
+            return [fn for (_, _, _, fn) in i.event_gen(1, yield_nones=False)]
 
         else:
-            while True:
-                # Check for (new) config files:
-                try:
-                    files = os.listdir(self.watch)
+            return os.listdir(self.watch)
 
-                except OSError as e:
-                    # Watch dir may not exist, that is OK, this just means
-                    # there is no new config yet.
-                    if e.errno != errno.ENOENT:
-                        raise
-                    break
+    def get_config(self):
+        """Get unique list of new config files in watch dir."""
+        config = set()
 
-                for fn in files:
-                    if fn not in self.watch_names:
-                        files.remove(fn)
-                    if fn in config:
-                        files.remove(fn)
+        while True:
+            filenames = self.get_config_files()
 
-                # If we did not find any new config files, exit loop.
-                if not files:
-                    break
+            for fn in filenames:
+                if fn not in self.watch_names:
+                    filenames.remove(fn)
+                if fn in config:
+                    filenames.remove(fn)
 
-                # Save the config files we found, sleep, then look again.
-                config.update(files)
+            # If we did not find any new config files, exit loop.
+            if not filenames:
+                break
 
-                # Sleep a bit to allow for settling. We loop until no new
-                # config files are found.
-                time.sleep(1.0)
+            # Save the config files we found, sleep, then look again.
+            config.update(filenames)
+
+            # Sleep a bit to allow for settling. We loop until no new
+            # config files are found.
+            time.sleep(1.0)
 
         return config
 
@@ -214,6 +248,13 @@ class ReloadConf(object):
                              'found')
                 # If command is not running and config is valid, start command.
                 self.start_command()
+
+    def kill(self):
+        """Kill the running command."""
+        if self.process is not None:
+            LOGGER.info('Killing command...')
+            self.process.kill()
+            self.process = None
 
     def test_command(self, quiet=True):
         """Run test command to verify configuration."""
