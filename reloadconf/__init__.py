@@ -80,14 +80,17 @@ class ReloadConf(object):
         HUP.
         """
         if self.reload is None:
-            assert self.process is not None, 'Command not started'
-            assert self.process.poll() is None, 'Command dead'
-            self.process.send_signal(signal.SIGHUP)
-            LOGGER.info('Sent process HUP signal')
+            if not self.check_command():
+                LOGGER.info('Command dead, restarting...')
+                self.start_command(wait_for_config=False)
+
+            else:
+                LOGGER.info('Sending HUP signal...')
+                self.process.send_signal(signal.SIGHUP)
 
         else:
+            LOGGER.info('Executing reload command...')
             subprocess.call(shlex.split(self.reload))
-            LOGGER.info('Executed reload command')
 
     def check_command(self):
         """Return False if command is dead, otherwise True."""
@@ -191,10 +194,7 @@ class ReloadConf(object):
             # config.
             if self.test_command(quiet=False):
                 LOGGER.debug('Configuration good, reloading')
-                if self.check_command():
-                    self.reload_command()
-                else:
-                    self.start_command(wait_for_config=False)
+                self.reload_command()
                 self.backup_remove(prev_config)
             else:
                 LOGGER.info('Configuration bad, restoring')
