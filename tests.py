@@ -181,6 +181,13 @@ class TestReloadConf(unittest.TestCase):
         rc.poll()
         self.assertEqual(stat.S_IMODE(os.stat(self.file).st_mode), 0o700)
 
+    def test_nodir(self):
+        """Test that watch directory does not need to exist."""
+        os.rmdir(self.dir)
+        rc = ReloadConf(self.dir, self.file, '/bin/sleep 1')
+        rc.poll()
+        self.assertTrue(rc.check_command())
+
     def test_main(self):
         """Test that reloadconf blocks on command."""
         class Sentinal(Exception):

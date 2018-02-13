@@ -147,7 +147,16 @@ class ReloadConf(object):
         new_config = set()
         while True:
             # Check for (new) config files:
-            files = os.listdir(self.watch)
+            try:
+                files = os.listdir(self.watch)
+
+            except IOError as e:
+                # Watch dir may not exist, that is OK, this just means there is
+                # no new config yet.
+                if e.errno != errno.ENOENT:
+                    raise
+                break
+
             for fn in files:
                 if fn not in self.watch_names:
                     files.remove(fn)
