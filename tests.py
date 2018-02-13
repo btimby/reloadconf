@@ -41,7 +41,23 @@ logging.basicConfig(
 LOGGER = logging.getLogger(__name__)
 
 
-class TestReloadConf(unittest.TestCase):
+class TestCase(unittest.TestCase):
+
+    # Print a full path representation of the single unit tests
+    # being run, e.g. tests.TestReloadConf.test_fail.
+    def __str__(self):
+        mod = self.__class__.__module__
+        if mod == '__main__':
+            mod = os.path.splitext(os.path.basename(__file__))[0]
+        return "%s.%s.%s" % (
+            mod, self.__class__.__name__, self._testMethodName)
+
+    # Avoid printing docstrings.
+    def shortDescription(self):
+        return None
+
+
+class TestReloadConf(TestCase):
 
     @classmethod
     def setUp(cls):
@@ -182,25 +198,8 @@ class TestReloadConf(unittest.TestCase):
         signal.signal(signal.SIGALRM, _alarm)
         signal.alarm(2)
 
-        sysargv = sys.argv
-
-        sys.argv = [
-            'reloadconf',
-            '--watch=%s' % self.dir,
-            '--config=%s' % self.file,
-            '--command=/bin/sleep 1',
-            '--test=/bin/true',
-        ]
-
-        try:
-            try:
-                import reloadconf.__main__
-                self.fail('Should never reach this')
-            except Sentinal:
-                pass
-
-        finally:
-            sys.argv = sysargv
+        with self.assertRaises(Sentinal):
+            self.run_cli()
 
     def test_wait_timeout(self):
         with self.assertRaises(AssertionError) as exc:
@@ -212,6 +211,5 @@ class TestReloadConf(unittest.TestCase):
         self.assertEqual(exc.exception.message, "invalid timeout 'string'")
 
 
-
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(verbosity=2)
