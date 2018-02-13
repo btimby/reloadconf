@@ -11,11 +11,15 @@ import logging
 import unittest
 import numbers
 
+from unittest import skipIf
+
 from os.path import exists as pathexists
 from os.path import join as pathjoin
 from os.path import basename
 
 from reloadconf import ReloadConf
+from reloadconf.__main__ import main
+
 
 # Program to indicate HUP signal received.
 TEST_PROGRAM = b"""#!/usr/bin/env python
@@ -31,6 +35,7 @@ signal.signal(signal.SIGHUP, _touch)
 time.sleep(2)
 
 """
+TEST_UID = 2000
 
 
 # Useful to debug threading issues.
@@ -148,17 +153,19 @@ class TestReloadConf(unittest.TestCase):
         self.assertIsInstance(rc.chown[0], numbers.Number)
         self.assertEqual(-1, rc.chown[1])
 
-        rc = ReloadConf(self.dir, self.file, '/bin/true', chown=1000)
-        self.assertEqual((1000, -1), rc.chown)
+        rc = ReloadConf(self.dir, self.file, '/bin/true', chown=TEST_UID)
+        self.assertEqual((TEST_UID, -1), rc.chown)
 
+    @skipIf(os.getuid() != 0, 'Only works as root')
     def test_chown(self):
         """Test chown capability."""
-        rc = ReloadConf(self.dir, self.file, '/bin/true', chown=(1000, 1000))
+        rc = ReloadConf(
+            self.dir, self.file, '/bin/true', chown=(TEST_UID, TEST_UID))
         with open(pathjoin(self.dir, basename(self.file)), 'wb') as f:
             f.write(b'foo')
         rc.poll()
-        self.assertEqual(1000, os.stat(self.file).st_uid)
-        self.assertEqual(1000, os.stat(self.file).st_gid)
+        self.assertEqual(TEST_UID, os.stat(self.file).st_uid)
+        self.assertEqual(TEST_UID, os.stat(self.file).st_gid)
 
     def test_chmod(self):
         """Test chmod capability."""
@@ -185,25 +192,25 @@ class TestReloadConf(unittest.TestCase):
         signal.signal(signal.SIGALRM, _alarm)
         signal.alarm(2)
 
-        sysargv = sys.argv
-
-        sys.argv = [
-            'reloadconf',
+        sysargv = [
             '--watch=%s' % self.dir,
             '--config=%s' % self.file,
             '--command=/bin/sleep 1',
             '--test=/bin/true',
+            '--chmod=700',
+            '--chown=2000,2000',
         ]
 
         try:
             try:
-                import reloadconf.__main__
+                main(sysargv)
                 self.fail('Should never reach this')
+
             except Sentinal:
                 pass
 
         finally:
-            sys.argv = sysargv
+            signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
 if __name__ == '__main__':
     unittest.main()
