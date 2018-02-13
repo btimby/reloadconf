@@ -9,9 +9,15 @@ import subprocess
 import time
 import shlex
 import shutil
+import numbers
+import pwd
+import grp
 
-from os.path import basename, dirname
+from six import PY3
+
+from os.path import basename, dirname, isfile
 from os.path import join as pathjoin
+from os.path import exists as pathexists
 from os.path import splitext
 from hashlib import md5
 
@@ -62,18 +68,13 @@ class ReloadConf(object):
 
     def __init__(self, watch, config, command, reload=None, test=None,
                  wait_for_path=None, wait_for_sock=None, wait_timeout=None,
-                 chown=None, chmod=None):
+                 chown=None, chmod=None, inotify=False):
         if isinstance(config, str):
             config = (config,)
-        self.watch = watch
         self.config = set(config)
         self.command = command
         self.reload = reload
         self.test = test
-        self.chown = chown
-        if self.chown is not None:
-            assert len(self.chown) == 2, 'Chown must be a tuple of (uid, gid)'
-        self.chmod = chmod
         self.wait_for_path = wait_for_path
         self.wait_for_sock = wait_for_sock
         self.wait_timeout = wait_timeout
@@ -82,15 +83,110 @@ class ReloadConf(object):
                 self.wait_timeout = float(self.wait_timeout)
             else:
                 self.wait_timeout = int(self.wait_timeout)
+        self.chown, self.chmod = self._setup_permissions(chown, chmod)
         # Extract names for use later.
         self.watch_names = [basename(f) for f in self.config]
         # The process (once started).
         self.process = None
+        self.watch = self._setup_watch(watch)
+        self.inotify = self._setup_inotify(inotify)
         self.wait_for_stuff()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.kill()
+
+    def _setup_inotify(self, flag):
+        """Set up inotify if requested."""
+        i = None
+
+        if flag:
+            try:
+                import inotify.adapters
+
+            except ImportError:
+                raise AssertionError(
+                    'cannot use inotify, package not installed')
+
+            else:
+                i = inotify.adapters.Inotify(paths=[self.watch],
+                                             block_duration_s=0)
+
+        return (flag, i)
+
+    def _setup_watch(self, watch):
+        """Create watch directory if it does not exist."""
+        assert not isfile(watch), 'watch dir is a file'
+
+        if pathexists(watch):
+            return watch
+
+        os.makedirs(watch)
+
+        if self.chown:
+            try:
+                os.chown(watch, *self.chown)
+
+            except OSError:
+                pass  # Non-fatal
+
+        if self.chmod:
+            try:
+                os.chmod(watch, self.chmod)
+
+            except OSError:
+                pass  # Non-fatal
+
+        return watch
+
+    def _setup_permissions(self, chown, chmod):
+        """Set up for chown/chmod."""
+        if chown is not None:
+            if isinstance(chown, str):
+                user, group = chown, None
+
+            else:
+                try:
+                    # Try to extract tuple.
+                    user, group = chown
+
+                except ValueError:
+                    # If length of iterable is not 2, then allow 1.
+                    assert len(chown) == 1, 'chown must be user or tuple'
+                    user, group = chown[0], None
+
+                except TypeError:
+                    # If not iterable, use given value as user.
+                    user, group = chown, None
+
+            # Lookup user id.
+            if isinstance(user, str):
+                user_info = pwd.getpwnam(user)
+                user = user_info.pw_uid
+
+            # Lookup group id, or use -1 (do not change group)
+            if isinstance(group, str):
+                group = grp.getgrnam(group).pw_gid
+
+            elif group is None:
+                group = -1
+
+            # Return tuple usable by os.chown().
+            chown = (user, group)
+
+        # Ensure chmod is numeric if given.
+        if chmod is not None:
+            assert isinstance(chmod, numbers.Number), 'chmod must be a number'
+
+        return chown, chmod
+
     def start_command(self, wait_for_config=True):
-        p = self.process = subprocess.Popen(shlex.split(self.command))
-        LOGGER.info('Command (%s) started with pid %s', self.command, p.pid)
+        """Run the service command."""
+        self.process = subprocess.Popen(shlex.split(self.command))
+        LOGGER.info(
+            'Command (%s) started with pid %s', self.command, self.process.pid)
 
     def reload_command(self):
         """
@@ -151,32 +247,79 @@ class ReloadConf(object):
         if self.wait_for_sock:
             self._wait_for_sock()
 
+    def get_config_files(self):
+        """Use polling method to enumerate files in watch dir."""
+        flag, i = self.inotify
+
+        if flag:
+            kwargs = {}
+
+            if PY3:
+                kwargs['timeout_s'] = 0
+
+            filenames = set()
+
+            for event in i.event_gen(**kwargs):
+                if event is None:
+                    break
+
+                filenames.add(event[3])
+
+            return list(filenames)
+
+        else:
+            return os.listdir(self.watch)
+
+    def get_config(self):
+        """Get unique list of new config files in watch dir."""
+        config = set()
+
+        while True:
+            filenames = self.get_config_files()
+
+            for fn in filenames:
+                if fn not in self.watch_names:
+                    filenames.remove(fn)
+                if fn in config:
+                    filenames.remove(fn)
+
+            # If we did not find any new config files, exit loop.
+            if not filenames:
+                break
+
+            # Save the config files we found, sleep, then look again.
+            config.update(filenames)
+
+            # Sleep a bit to allow for settling. We loop until no new
+            # config files are found.
+            time.sleep(1.0)
+
+        return config
+
     def poll(self):
         """Processing loop."""
         # First attempt to install a new config.
-        files = os.listdir(self.watch)
-        new_config = set()
-        for i in range(2):
-            for name in self.watch_names:
-                if name in files:
-                    new_config.add(name)
-            if not new_config or i == 1:
-                break
-            # Sleep a bit to allow for more config files to appear, we want
-            # to avoid a race condition with the process that generates
-            # these config files.
-            time.sleep(1.0)
-        if new_config:
-            LOGGER.info('New configuration found %s', ', '.join(new_config))
+        config = self.get_config()
+
+        if config:
+            LOGGER.info('New configuration found %s', ', '.join(config))
             # TODO: compare new config checksums with old to see if there are
             # really changes.
-            self.test_and_swap(new_config)
+            self.test_and_swap(config)
+
         elif not self.check_command():
             if self.test_command():
                 LOGGER.debug('Command not running and valid configuration '
                              'found')
                 # If command is not running and config is valid, start command.
                 self.start_command()
+
+    def kill(self):
+        """Kill the running command."""
+        if self.process is not None:
+            LOGGER.info('Killing command...')
+            self.process.kill()
+            self.process = None
 
     def test_command(self, quiet=True):
         """Run test command to verify configuration."""
@@ -250,7 +393,6 @@ class ReloadConf(object):
 
             if self.chmod is not None:
                 os.chmod(dst, self.chmod)
-
 
     def test_and_swap(self, config):
         """Backup old config, write new config, test config, HUP or restore."""
