@@ -207,15 +207,15 @@ class ReloadConf(object):
             if PY3:
                 kwargs['timeout_s'] = 0
 
-            filenames = []
+            filenames = set()
 
             for event in i.event_gen(**kwargs):
                 if event is None:
                     break
 
-                filenames.append(event[3])
+                filenames.add(event[3])
 
-            return filenames
+            return list(filenames)
 
         else:
             return os.listdir(self.watch)
