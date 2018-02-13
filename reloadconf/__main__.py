@@ -5,8 +5,10 @@ from __future__ import absolute_import
 import sys
 import time
 import logging
+import textwrap
 
 from docopt import docopt
+from schema import Schema, Use, Or
 
 from reloadconf import ReloadConf
 
@@ -15,22 +17,37 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.addHandler(logging.NullHandler())
 
 
-def main(opt):
+def user_and_group(value):
+    def _try_int(v):
+        try:
+            return int(v)
+        except ValueError:
+            return v
+
+    return tuple(map(_try_int, value.split(',')))
+
+
+def main(argv):
     """
     reloadconf - Monitor config changes and safely restart.
 
     Usage:
         reloadconf --command=<cmd> --watch=<dir> (--config=<file> ...)
-                   [--reload=<cmd> --test=<cmd> --debug]
+                   [--reload=<cmd> --test=<cmd> --debug --chown=<user,group>]
+                   [--chmod=<mode>]
 
     Options:
-        --command=<cmd>  The program to run when configuration is valid.
-        --watch=<dir>    The directory to watch for incoming files.
-        --config=<file>  A destination config file path.
-        --reload=<cmd>   The command to reload configuration (defaults to HUP
-                         signal).
-        --test=<cmd>     The command to test configuration.
-        --debug          Verbose output.
+        --command=<cmd>       The program to run when configuration is valid.
+        --watch=<dir>         The directory to watch for incoming files.
+        --config=<file>       A destination config file path.
+        --reload=<cmd>        The command to reload configuration (defaults
+                              to HUP signal).
+        --test=<cmd>          The command to test configuration.
+        --chown=<user,group>  The user and (optionally) group to chown config
+                              files to before starting service.
+        --chmod=<mode>        Mode to set config files to before starting
+                              service.
+        --debug               Verbose output.
 
     Assumptions:
      - The command accepts HUP signal to reload it's configuration.
@@ -58,6 +75,22 @@ def main(opt):
     configuration, then the generator program should write them to temporary
     space before moving them into the input directory.
     """
+    opt = docopt(textwrap.dedent(main.__doc__), argv)
+
+    opt = Schema({
+        '--chown': Or(None, Use(user_and_group)),
+        '--chmod': Or(None, Use(int)),
+
+        object: object,
+    }).validate(opt)
+
+    logger = logging.getLogger()
+    # Set up logging so we can see output.
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+
+    logger.setLevel(logging.INFO)
+    if opt.pop('--debug', None):
+        logger.setLevel(logging.DEBUG)
 
     # Convert from CLI arguments to kwargs.
     kwargs = {}
@@ -71,20 +104,13 @@ def main(opt):
     while True:
         try:
             control.poll()
+
         except Exception:
             LOGGER.exception('Error polling', exc_info=True)
-        # Check 20 times a minute.
+
+        # Check up to 20 times a minute.
         time.sleep(3.0)
 
 
-opt = docopt(main.__doc__)
-
-logger = logging.getLogger()
-# Set up logging so we can see output.
-logger.addHandler(logging.StreamHandler(sys.stdout))
-
-logger.setLevel(logging.INFO)
-if opt.pop('--debug', None):
-    logger.setLevel(logging.DEBUG)
-
-main(opt)
+if __name__ == '__main__':
+    main(sys.argv)
