@@ -128,6 +128,7 @@ def main(argv):
 
     try:
         rc = ReloadConf(**kwargs)
+
     except AssertionError as e:
         raise DocoptExit(e.args[0])
 

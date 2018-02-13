@@ -61,7 +61,7 @@ LOGGER = logging.getLogger(__name__)
 
 class TestTimeoutError(Exception):
     def __init__(self):
-        super().__init__('Timeout exceeded')
+        super(TestTimeoutError, self).__init__('Timeout exceeded')
 
 
 @contextlib.contextmanager
@@ -315,12 +315,14 @@ class TestReloadConf(TestCase):
     def test_wait_timeout(self):
         with timeout():
             with self.assertRaises(DocoptExit) as exc:
-                self.run_cli(others=['--wait-timeout=-1'])
+                self.run_cli(others=['--wait-timeout=-1',
+                                     '--wait-for-path=foo-bar-path'])
             self.assertStartsWith("Invalid timeout", exc.exception.args[0])
 
         with timeout():
             with self.assertRaises(DocoptExit) as exc:
-                self.run_cli(others=['--wait-timeout=string'])
+                self.run_cli(others=['--wait-timeout=string',
+                                     '--wait-for-path=foo-bar-path'])
             self.assertStartsWith("Invalid timeout", exc.exception.args[0])
 
     def test_wait_for_path_fail(self):
