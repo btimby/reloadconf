@@ -211,6 +211,9 @@ class ReloadConf(object):
         if path is None:
             return
 
+        assert isinstance(timeout, (float, int)), 'Invalid timeout'
+        assert isinstance(path, str), 'Invalid path'
+
         give_up_at = time.time() + timeout
 
         while time.time() <= give_up_at:
@@ -224,6 +227,12 @@ class ReloadConf(object):
     def wait_for_sock(self, addr, timeout):
         if addr is None:
             return
+
+        assert isinstance(timeout, (float, int)), 'Invalid timeout'
+        assert len(addr) == 2, 'Invalid address'
+        assert isinstance(addr[0], str), 'Invalid host'
+        assert isinstance(addr[1], int), 'Invalid port'
+        assert 0 < addr[1] < 65536, 'Invalid port'
 
         err, give_up_at = None, time.time() + int(timeout)
 
