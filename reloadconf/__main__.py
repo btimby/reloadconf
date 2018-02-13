@@ -58,7 +58,7 @@ def main(argv):
         --chown=<user,group>
             The user and (optionally) group to chown config files to before
             starting service.
-        --chmod=<mode> 
+        --chmod=<mode>
             Mode to set config files to before starting service.
         --inotify
             Use inotify instead of polling.

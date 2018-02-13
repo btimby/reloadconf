@@ -239,8 +239,9 @@ class ReloadConf(object):
             finally:
                 s.close()
 
-        raise TimeoutExpired("can't connect to %s after %s secs; reason: %r" % (
-                             addr, timeout, err))
+        raise TimeoutExpired(
+            "can't connect to %s after %s secs; reason: %r" % (addr, timeout,
+                                                               err))
 
     def get_config_files(self):
         """Use polling method to enumerate files in watch dir."""
