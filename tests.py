@@ -4,10 +4,12 @@ import os
 import shutil
 import signal
 import sys
+import stat
 import tempfile
 import time
 import logging
 import unittest
+import numbers
 
 from os.path import exists as pathexists
 from os.path import join as pathjoin
@@ -132,6 +134,45 @@ class TestReloadConf(unittest.TestCase):
         rc.poll()
         time.sleep(0.1)
         self.assertFalse(pathexists(self.sig))
+
+    def test_chown_fail(self):
+        """Test chown validation."""
+        # Ensure chown must have len() == 2:
+        with self.assertRaises(AssertionError):
+            ReloadConf(None, [], None, chown=(1, 2, 3))
+
+    def test_chown_user(self):
+        """Test chown argument handling (user only)."""
+        # Ensure chown handles a user name:
+        rc = ReloadConf(self.dir, self.file, '/bin/true', chown='nobody')
+        self.assertIsInstance(rc.chown[0], numbers.Number)
+        self.assertEqual(-1, rc.chown[1])
+
+        rc = ReloadConf(self.dir, self.file, '/bin/true', chown=1000)
+        self.assertEqual((1000, -1), rc.chown)
+
+    def test_chown(self):
+        """Test chown capability."""
+        rc = ReloadConf(self.dir, self.file, '/bin/true', chown=(1000, 1000))
+        with open(pathjoin(self.dir, basename(self.file)), 'wb') as f:
+            f.write(b'foo')
+        rc.poll()
+        self.assertEqual(1000, os.stat(self.file).st_uid)
+        self.assertEqual(1000, os.stat(self.file).st_gid)
+
+    def test_chmod(self):
+        """Test chmod capability."""
+        # Ensure chmod must be numeric:
+        with self.assertRaises(AssertionError):
+            ReloadConf(None, [], None, chmod='foo')
+        # Ensure config files are properly chmod()ed:
+        rc = ReloadConf(self.dir, self.file, '/bin/true', chmod=0o700)
+        watch = pathjoin(self.dir, basename(self.file))
+        with open(watch, 'wb') as f:
+            f.write(b'foo')
+        os.chmod(watch, 0o755)
+        rc.poll()
+        self.assertEqual(stat.S_IMODE(os.stat(self.file).st_mode), 0o700)
 
     def test_main(self):
         """Test that reloadconf blocks on command."""

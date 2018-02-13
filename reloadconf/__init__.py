@@ -8,6 +8,9 @@ import subprocess
 import time
 import shlex
 import shutil
+import numbers
+import pwd
+import grp
 
 from os.path import basename, dirname
 from os.path import join as pathjoin
@@ -64,14 +67,51 @@ class ReloadConf(object):
         self.command = command
         self.reload = reload
         self.test = test
-        self.chown = chown
-        if self.chown is not None:
-            assert len(self.chown) == 2, 'Chown must be a tuple of (uid, gid)'
-        self.chmod = chmod
+        self.chown, self.chmod = self._setup_permissions(chown, chmod)
         # Extract names for use later.
         self.watch_names = [basename(f) for f in self.config]
         # The process (once started).
         self.process = None
+
+    def _setup_permissions(self, chown, chmod):
+        if chown is not None:
+            if isinstance(chown, str):
+                user, group = chown, None
+
+            else:
+                try:
+                    # Try to extract tuple.
+                    user, group = chown
+
+                except ValueError:
+                    # If length of iterable is not 2, then allow 1.
+                    assert len(chown) == 1, 'chown must be user or tuple'
+                    user, group = chown[0], None
+
+                except TypeError:
+                    # If not iterable, use given value as user.
+                    user, group = chown, None
+
+            # Lookup user id.
+            if isinstance(user, str):
+                user_info = pwd.getpwnam(user)
+                user = user_info.pw_uid
+
+            # Lookup group id, or use -1 (do not change group)
+            if isinstance(group, str):
+                group = grp.getgrnam(group).pw_gid
+
+            elif group is None:
+                group = -1
+
+            # Return tuple usable by os.chown().
+            chown = (user, group)
+
+        # Ensure chmod is numeric if given.
+        if chmod is not None:
+            assert isinstance(chmod, numbers.Number), 'chmod must be a number'
+
+        return chown, chmod
 
     def start_command(self, wait_for_config=True):
         p = self.process = subprocess.Popen(shlex.split(self.command))
