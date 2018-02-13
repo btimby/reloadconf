@@ -19,9 +19,7 @@ LOGGER.addHandler(logging.NullHandler())
 
 def host_and_port(value):
     host, port = value.split(':')
-    port = int(port)
-    assert 0 < port < 65536, 'Invalid port'
-    return host, port
+    return host, int(port)
 
 
 def user_and_group(value):
@@ -105,9 +103,9 @@ def main(argv):
             '--watch': Use(str),
             '--chown': Or(None, Use(user_and_group)),
             '--chmod': Or(None, Use(int)),
-            '--wait-for-sock': Or(None, Use(host_and_port)),
-            '--wait-timeout': Or(None, And(Use(float), lambda x: x > 0),
-                                 error='Invalid timeout'),
+            '--wait-for-sock': Or(None, Use(host_and_port),
+                                  error='Invalid socket'),
+            '--wait-timeout': Or(None, Use(float), error='Invalid timeout'),
 
             object: object,
         }).validate(opt)
@@ -128,7 +126,12 @@ def main(argv):
     for k in opt.keys():
         kwargs[k.lstrip('-').replace('-', '_')] = opt[k]
 
-    with ReloadConf(**kwargs) as rc:
+    try:
+        rc = ReloadConf(**kwargs)
+    except AssertionError as e:
+        raise DocoptExit(e.args[0])
+
+    with rc:
         LOGGER.info('Reloadconf monitoring %s for %s', kwargs['watch'],
                     kwargs['command'])
 

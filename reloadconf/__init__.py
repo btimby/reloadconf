@@ -212,6 +212,8 @@ class ReloadConf(object):
             return
 
         assert isinstance(timeout, (float, int)), 'Invalid timeout'
+        assert timeout > 0, 'Invalid timeout'
+
         assert isinstance(path, str), 'Invalid path'
 
         give_up_at = time.time() + timeout
@@ -229,6 +231,8 @@ class ReloadConf(object):
             return
 
         assert isinstance(timeout, (float, int)), 'Invalid timeout'
+        assert timeout > 0, 'Invalid timeout'
+
         assert len(addr) == 2, 'Invalid address'
         assert isinstance(addr[0], str), 'Invalid host'
         assert isinstance(addr[1], int), 'Invalid port'

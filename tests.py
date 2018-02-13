@@ -13,6 +13,8 @@ import time
 import unittest
 import numbers
 
+import contextlib
+
 from unittest import skipIf
 
 from docopt import DocoptExit
@@ -55,6 +57,26 @@ logging.basicConfig(
     format='%(thread)d: %(message)s'
 )
 LOGGER = logging.getLogger(__name__)
+
+
+class TestTimeoutError(Exception):
+    def __init__(self):
+        super().__init__('Timeout exceeded')
+
+
+@contextlib.contextmanager
+def timeout(timeout=2):
+
+    def _alarm(*args):
+        raise TestTimeoutError()
+
+    signal.signal(signal.SIGALRM, _alarm)
+    signal.alarm(timeout)
+
+    # Let the code run, but our alarm will interrupt it if it exceeds timeout.
+    yield
+
+    signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
 
 class TestCase(unittest.TestCase):
@@ -274,7 +296,10 @@ class TestReloadConf(TestCase):
 
     def test_nodir(self):
         """Test that watch directory does not need to exist."""
+        # Remove the watch directory.
         os.rmdir(self.dir)
+
+        # Ensure reloadconf creates the watch directory.
         with ReloadConf(self.dir, self.file, '/bin/sleep 1',
                         chown=(TEST_UID, TEST_UID), chmod=0o700) as rc:
             rc.poll()
@@ -283,29 +308,20 @@ class TestReloadConf(TestCase):
 
     def test_main(self):
         """Test that reloadconf blocks on command."""
-        class Sentinal(Exception):
-            pass
-
-        def _alarm(*args):
-            raise Sentinal()
-
-        signal.signal(signal.SIGALRM, _alarm)
-        signal.alarm(2)
-
-        try:
-            with self.assertRaises(Sentinal):
+        with timeout():
+            with self.assertRaises(TestTimeoutError):
                 self.run_cli()
-        finally:
-            signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
     def test_wait_timeout(self):
-        with self.assertRaises(DocoptExit) as exc:
-            self.run_cli(others=['--wait-timeout=-1'])
-        self.assertStartsWith("Invalid timeout", exc.exception.args[0])
+        with timeout():
+            with self.assertRaises(DocoptExit) as exc:
+                self.run_cli(others=['--wait-timeout=-1'])
+            self.assertStartsWith("Invalid timeout", exc.exception.args[0])
 
-        with self.assertRaises(DocoptExit) as exc:
-            self.run_cli(others=['--wait-timeout=string'])
-        self.assertStartsWith("Invalid timeout", exc.exception.args[0])
+        with timeout():
+            with self.assertRaises(DocoptExit) as exc:
+                self.run_cli(others=['--wait-timeout=string'])
+            self.assertStartsWith("Invalid timeout", exc.exception.args[0])
 
     def test_wait_for_path_fail(self):
         with self.assertRaises(TimeoutExpired):
@@ -313,24 +329,13 @@ class TestReloadConf(TestCase):
                                  '--wait-timeout=0.1'])
 
     def test_wait_for_path_ok(self):
-        class Sentinal(Exception):
-            pass
-
-        def _alarm(*args):
-            raise Sentinal()
-
-        signal.signal(signal.SIGALRM, _alarm)
-        signal.alarm(1)
-
         with open(TESTFN, "w"):
             pass
 
-        try:
-            with self.assertRaises(Sentinal):
+        with timeout():
+            with self.assertRaises(TestTimeoutError):
                 self.run_cli(others=['--wait-for-path=' + TESTFN,
                                     '--wait-timeout=0.1'])
-        finally:
-            signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
     def test_wait_for_sock_fail(self):
         with self.assertRaises(TimeoutExpired):
@@ -338,21 +343,10 @@ class TestReloadConf(TestCase):
                                  '--wait-timeout=0.1'])
 
     def test_wait_for_sock_ok(self):
-        class Sentinal(Exception):
-            pass
-
-        def _alarm(*args):
-            raise Sentinal()
-
-        signal.signal(signal.SIGALRM, _alarm)
-        signal.alarm(1)
-
-        try:
-            with self.assertRaises(Sentinal):
+        with timeout():
+            with self.assertRaises(TestTimeoutError):
                 self.run_cli(others=['--wait-for-sock=google.com:80',
                                     '--wait-timeout=3'])
-        finally:
-            signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
 
 if __name__ == '__main__':
