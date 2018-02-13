@@ -64,11 +64,11 @@ class TestReloadConf(unittest.TestCase):
         for path in (cls.file, cls.prog):
             try:
                 os.remove(path)
-            except IOError:
+            except OSError:
                 pass
         try:
             shutil.rmtree(cls.dir)
-        except IOError:
+        except OSError:
             pass
 
     def test_fail(self):
@@ -144,7 +144,7 @@ class TestReloadConf(unittest.TestCase):
         """Test chown validation."""
         # Ensure chown must have len() == 2:
         with self.assertRaises(AssertionError):
-            ReloadConf(None, [], None, chown=(1, 2, 3))
+            ReloadConf(self.dir, [], None, chown=(1, 2, 3))
 
     def test_chown_user(self):
         """Test chown argument handling (user only)."""
@@ -171,7 +171,7 @@ class TestReloadConf(unittest.TestCase):
         """Test chmod capability."""
         # Ensure chmod must be numeric:
         with self.assertRaises(AssertionError):
-            ReloadConf(None, [], None, chmod='foo')
+            ReloadConf(self.dir, [], None, chmod='foo')
         # Ensure config files are properly chmod()ed:
         rc = ReloadConf(self.dir, self.file, '/bin/true', chmod=0o700)
         watch = pathjoin(self.dir, basename(self.file))
@@ -180,6 +180,13 @@ class TestReloadConf(unittest.TestCase):
         os.chmod(watch, 0o755)
         rc.poll()
         self.assertEqual(stat.S_IMODE(os.stat(self.file).st_mode), 0o700)
+
+    def test_nodir(self):
+        """Test that watch directory does not need to exist."""
+        os.rmdir(self.dir)
+        rc = ReloadConf(self.dir, self.file, '/bin/sleep 1')
+        rc.poll()
+        self.assertTrue(rc.check_command())
 
     def test_main(self):
         """Test that reloadconf blocks on command."""
