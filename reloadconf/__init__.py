@@ -75,9 +75,6 @@ class ReloadConf(object):
         self.command = command
         self.reload = reload
         self.test = test
-        self.wait_for_path = wait_for_path
-        self.wait_for_sock = wait_for_sock
-        self.wait_timeout = wait_timeout
         self.chown, self.chmod = self._setup_permissions(chown, chmod)
         # Extract names for use later.
         self.watch_names = [basename(f) for f in self.config]
@@ -85,7 +82,10 @@ class ReloadConf(object):
         self.process = None
         self.watch = self._setup_watch(watch)
         self.inotify = self._setup_inotify(inotify)
-        self.wait_for_stuff()
+
+        # Wait for preconditions (or throw)
+        self.wait_for_path(wait_for_path, wait_timeout)
+        self.wait_for_sock(wait_for_sock, wait_timeout)
 
     def __enter__(self):
         return self
@@ -207,22 +207,30 @@ class ReloadConf(object):
         """Return False if command is dead, otherwise True."""
         return self.process is not None and self.process.poll() is None
 
-    def _wait_for_path(self):
-        giveup_at = time.time() + self.wait_timeout
-        while time.time() <= giveup_at:
-            if os.path.exists(self.wait_for_path):
+    def wait_for_path(self, path, timeout):
+        if path is None:
+            return
+
+        give_up_at = time.time() + timeout
+
+        while time.time() <= give_up_at:
+            if os.path.exists(path):
                 return
             time.sleep(0.1)
-        raise TimeoutExpired("file %r still does not exist after %s secs" % (
-                             self.wait_for_path, self.wait_timeout))
 
-    def _wait_for_sock(self):
-        err = None
-        giveup_at = time.time() + int(self.wait_timeout)
-        while time.time() <= giveup_at:
+        raise TimeoutExpired("file %r still does not exist after %s secs" % (
+                             path, timeout))
+
+    def wait_for_sock(self, addr, timeout):
+        if addr is None:
+            return
+
+        err, give_up_at = None, time.time() + int(timeout)
+
+        while time.time() <= give_up_at:
             s = socket.socket()
             try:
-                s.connect(self.wait_for_sock)
+                s.connect(addr)
             except Exception as _:
                 err = _
                 time.sleep(0.1)
@@ -230,14 +238,9 @@ class ReloadConf(object):
                 return
             finally:
                 s.close()
-        raise TimeoutExpired("can't connect to %s after %s secs; reason: %r" % (
-                             self.wait_for_sock, self.wait_timeout, err))
 
-    def wait_for_stuff(self):
-        if self.wait_for_path:
-            self._wait_for_path()
-        if self.wait_for_sock:
-            self._wait_for_sock()
+        raise TimeoutExpired("can't connect to %s after %s secs; reason: %r" % (
+                             addr, timeout, err))
 
     def get_config_files(self):
         """Use polling method to enumerate files in watch dir."""
