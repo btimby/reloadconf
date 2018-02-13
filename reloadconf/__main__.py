@@ -15,13 +15,30 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.addHandler(logging.NullHandler())
 
 
+def validate_opts(opts):
+    # mandatory
+    assert opts.get('command', '').strip(), "empty command opt"
+    assert opts.get('watch', '').strip(), "empty watch opt"
+    # others
+    addr = opts.get('wait_for_socket')
+    if addr:
+        assert addr.count(':') == 1, addr
+        host, port = addr.split(':')
+        assert int(port) > 0, addr
+        assert int(port) < 65536, addr
+    timeout = opts.get('wait_timeout')
+    if timeout:
+        assert int(timeout) > 0, timeout
+
+
 def main(opt):
     """
     reloadconf - Monitor config changes and safely restart.
 
     Usage:
         reloadconf --command=<cmd> --watch=<dir> (--config=<file> ...)
-                   [--reload=<cmd> --test=<cmd> --debug]
+                   [--reload=<cmd> --test=<cmd> --wait-for-file=<file>
+                    --wait-for-socket=<host:port> --wait-timeout=<secs> --debug]
 
     Options:
         --command=<cmd>  The program to run when configuration is valid.
@@ -31,7 +48,7 @@ def main(opt):
                          signal).
         --test=<cmd>     The command to test configuration.
         --wait-for-file=<file>
-                         Delay start until file appears on disk.
+                         Delay start until file or directory appears on disk.
         --wait-for-socket=<host:port>
                          Delay start until connection succeeds.
         --wait-timeout=<secs>
@@ -68,8 +85,9 @@ def main(opt):
     # Convert from CLI arguments to kwargs.
     kwargs = {}
     for k in opt.keys():
-        kwargs[k.lstrip('-')] = opt[k]
+        kwargs[k.lstrip('-').replace('-', '_')] = opt[k]
 
+    validate_opts(kwargs)
     control = ReloadConf(**kwargs)
     LOGGER.info('Reloadconf monitoring %s for %s', kwargs['watch'],
                 kwargs['command'])

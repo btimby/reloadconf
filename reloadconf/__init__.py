@@ -4,6 +4,7 @@ import errno
 import logging
 import os
 import signal
+import socket
 import subprocess
 import time
 import shlex
@@ -55,7 +56,8 @@ class ReloadConf(object):
       E. If test fails, revert config.
     """
 
-    def __init__(self, watch, config, command, reload=None, test=None):
+    def __init__(self, watch, config, command, reload=None, test=None,
+                 wait_for_file=None, wait_for_socket=None, wait_timeout=None):
         if isinstance(config, str):
             config = (config,)
         self.watch = watch
@@ -63,6 +65,9 @@ class ReloadConf(object):
         self.command = command
         self.reload = reload
         self.test = test
+        self.wait_for_file = wait_for_file
+        self.wait_for_socket = wait_for_socket
+        self.wait_timeout = wait_timeout
         # Extract names for use later.
         self.watch_names = [basename(f) for f in self.config]
         # The process (once started).
@@ -96,9 +101,45 @@ class ReloadConf(object):
         """Return False if command is dead, otherwise True."""
         return self.process is not None and self.process.poll() is None
 
+    def _wait_for_file(self):
+        giveup_at = time.time() + int(self.wait_timeout)
+        while time.time() <= giveup_at:
+            if os.path.exists(self.wait_for_file):
+                return
+            time.sleep(0.1)
+        raise RuntimeError("file %r still does not exist after %s secs" % (
+                           self.wait_for_file, self.wait_timeout))
+
+    def _wait_for_socket(self):
+        host, port = self.wait_for_socket.split(':')
+        port = int(port)
+        addr = (host, port)
+        err = None
+        giveup_at = time.time() + int(self.wait_timeout)
+        while time.time() <= giveup_at:
+            s = socket.socket()
+            try:
+                s.connect(addr)
+            except Exception as _:
+                err = _
+                time.sleep(0.1)
+            else:
+                return
+            finally:
+                s.close()
+        raise RuntimeError("can't connect to %s after %s secs; reason: %r" % (
+                           self.wait_for_socket, self.wait_timeout, err))
+
+    def wait_for_stuff(self):
+        if self.wait_for_file:
+            self._wait_for_file()
+        if self.wait_for_socket:
+            self._wait_for_socket()
+
     def poll(self):
         """Processing loop."""
         # First attempt to install a new config.
+        self.wait_for_stuff()
         files = os.listdir(self.watch)
         new_config = set()
         for i in range(2):
