@@ -190,7 +190,7 @@ class ReloadConf(object):
                 # Sleep a bit to allow for settling. We loop until no new
                 # config files are found.
                 time.sleep(1.0)
-        
+
         return config
 
     def poll(self):
