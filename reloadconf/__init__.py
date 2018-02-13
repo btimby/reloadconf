@@ -144,23 +144,33 @@ class ReloadConf(object):
     def poll(self):
         """Processing loop."""
         # First attempt to install a new config.
-        files = os.listdir(self.watch)
         new_config = set()
-        for i in range(2):
-            for name in self.watch_names:
-                if name in files:
-                    new_config.add(name)
-            if not new_config or i == 1:
+        while True:
+            # Check for (new) config files:
+            files = os.listdir(self.watch)
+            for fn in files:
+                if fn not in self.watch_names:
+                    files.remove(fn)
+                if fn in new_config:
+                    files.remove(fn)
+
+            # If we did not find any new config files, exit loop.
+            if not files:
                 break
-            # Sleep a bit to allow for more config files to appear, we want
-            # to avoid a race condition with the process that generates
-            # these config files.
+
+            # Save the config files we found, sleep, then look again.
+            new_config.update(files)
+
+            # Sleep a bit to allow for settling. We loop until no new config
+            # files are found.
             time.sleep(1.0)
+
         if new_config:
             LOGGER.info('New configuration found %s', ', '.join(new_config))
             # TODO: compare new config checksums with old to see if there are
             # really changes.
             self.test_and_swap(new_config)
+
         elif not self.check_command():
             if self.test_command():
                 LOGGER.debug('Command not running and valid configuration '
