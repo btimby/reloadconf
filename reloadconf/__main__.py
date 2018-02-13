@@ -7,8 +7,8 @@ import time
 import logging
 import textwrap
 
-from docopt import docopt
-from schema import Schema, Use, Or
+from docopt import docopt, DocoptExit
+from schema import Schema, Use, Or, And, SchemaError
 
 from reloadconf import ReloadConf
 
@@ -17,25 +17,11 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.addHandler(logging.NullHandler())
 
 
-def validate_opts(opts):
-    # mandatory
-    assert opts.get('command', '').strip(), "empty command opt"
-    assert opts.get('watch', '').strip(), "empty watch opt"
-    # others
-    addr = opts.get('wait_for_sock')
-    if addr:
-        assert addr.count(':') == 1, "invalid address %r" % addr
-        host, port = addr.split(':')
-        assert port.isdigit(), "invalid port" % port
-        assert int(port) > 0, "invalid port %r" % port
-        assert int(port) < 65536, "invalid port %r" % port
-    timeout = opts.get('wait_timeout')
-    if timeout:
-        try:
-            float(timeout)
-        except ValueError:
-            assert 0, "invalid timeout %r" % timeout
-        assert float(timeout) > 0, "invalid timeout %r" % timeout
+def host_and_port(value):
+    host, port = value.split(':')
+    port = int(port)
+    assert 0 < port < 65536, 'Invalid port'
+    return host, port
 
 
 def user_and_group(value):
@@ -113,12 +99,21 @@ def main(argv):
     """
     opt = docopt(textwrap.dedent(main.__doc__), argv)
 
-    opt = Schema({
-        '--chown': Or(None, Use(user_and_group)),
-        '--chmod': Or(None, Use(int)),
+    try:
+        opt = Schema({
+            '--command': Use(str),
+            '--watch': Use(str),
+            '--chown': Or(None, Use(user_and_group)),
+            '--chmod': Or(None, Use(int)),
+            '--wait-for-sock': Or(None, Use(host_and_port)),
+            '--wait-timeout': Or(None, And(Use(float), lambda x: x > 0),
+                                 error='Invalid timeout'),
 
-        object: object,
-    }).validate(opt)
+            object: object,
+        }).validate(opt)
+
+    except SchemaError as e:
+        raise DocoptExit(e.args[0])
 
     logger = logging.getLogger()
     # Set up logging so we can see output.
@@ -133,7 +128,6 @@ def main(argv):
     for k in opt.keys():
         kwargs[k.lstrip('-').replace('-', '_')] = opt[k]
 
-    validate_opts(kwargs)
     with ReloadConf(**kwargs) as rc:
         LOGGER.info('Reloadconf monitoring %s for %s', kwargs['watch'],
                     kwargs['command'])

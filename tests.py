@@ -15,6 +15,8 @@ import numbers
 
 from unittest import skipIf
 
+from docopt import DocoptExit
+
 from os.path import exists as pathexists
 from os.path import join as pathjoin
 from os.path import basename, isdir
@@ -69,6 +71,11 @@ class TestCase(unittest.TestCase):
     # Avoid printing docstrings.
     def shortDescription(self):
         return None
+
+    def assertStartsWith(self, start, text, message=None):
+        if message is None:
+            message = 'text does not start with %s' % start
+        self.assertTrue(text.startswith(start), message)
 
 
 def safe_rmpath(path):
@@ -292,13 +299,13 @@ class TestReloadConf(TestCase):
             signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
     def test_wait_timeout(self):
-        with self.assertRaises(AssertionError) as exc:
+        with self.assertRaises(DocoptExit) as exc:
             self.run_cli(others=['--wait-timeout=-1'])
-        self.assertEqual(exc.exception.args[0], "invalid timeout '-1'")
+        self.assertStartsWith("Invalid timeout", exc.exception.args[0])
 
-        with self.assertRaises(AssertionError) as exc:
+        with self.assertRaises(DocoptExit) as exc:
             self.run_cli(others=['--wait-timeout=string'])
-        self.assertEqual(exc.exception.args[0], "invalid timeout 'string'")
+        self.assertStartsWith("Invalid timeout", exc.exception.args[0])
 
     def test_wait_for_path_fail(self):
         with self.assertRaises(TimeoutExpired):

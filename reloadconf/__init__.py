@@ -78,11 +78,6 @@ class ReloadConf(object):
         self.wait_for_path = wait_for_path
         self.wait_for_sock = wait_for_sock
         self.wait_timeout = wait_timeout
-        if self.wait_timeout and isinstance(self.wait_timeout, str):
-            if '.' in self.wait_timeout:
-                self.wait_timeout = float(self.wait_timeout)
-            else:
-                self.wait_timeout = int(self.wait_timeout)
         self.chown, self.chmod = self._setup_permissions(chown, chmod)
         # Extract names for use later.
         self.watch_names = [basename(f) for f in self.config]
@@ -222,15 +217,12 @@ class ReloadConf(object):
                              self.wait_for_path, self.wait_timeout))
 
     def _wait_for_sock(self):
-        host, port = self.wait_for_sock.split(':')
-        port = int(port)
-        addr = (host, port)
         err = None
         giveup_at = time.time() + int(self.wait_timeout)
         while time.time() <= giveup_at:
             s = socket.socket()
             try:
-                s.connect(addr)
+                s.connect(self.wait_for_sock)
             except Exception as _:
                 err = _
                 time.sleep(0.1)
