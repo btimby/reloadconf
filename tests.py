@@ -7,16 +7,25 @@ import shutil
 import signal
 import stat
 import sys
+import stat
 import tempfile
 import time
 import unittest
+import numbers
+
+import contextlib
+
+from unittest import skipIf
+
+from docopt import DocoptExit
 
 from os.path import exists as pathexists
 from os.path import join as pathjoin
-from os.path import basename
+from os.path import basename, isdir
 
 from reloadconf import ReloadConf
 from reloadconf import TimeoutExpired
+from reloadconf.__main__ import main
 
 
 # Test file name used during tests.
@@ -33,9 +42,11 @@ def _touch(*args):
 
 signal.signal(signal.SIGHUP, _touch)
 
-time.sleep(2)
+while True:
+    time.sleep(1)
 
 """
+TEST_UID = 2000
 
 
 # Useful to debug threading issues.
@@ -46,6 +57,26 @@ logging.basicConfig(
     format='%(thread)d: %(message)s'
 )
 LOGGER = logging.getLogger(__name__)
+
+
+class TestTimeoutError(Exception):
+    def __init__(self):
+        super(TestTimeoutError, self).__init__('Timeout exceeded')
+
+
+@contextlib.contextmanager
+def timeout(timeout=2):
+
+    def _alarm(*args):
+        raise TestTimeoutError()
+
+    signal.signal(signal.SIGALRM, _alarm)
+    signal.alarm(timeout)
+
+    # Let the code run, but our alarm will interrupt it if it exceeds timeout.
+    yield
+
+    signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
 
 class TestCase(unittest.TestCase):
@@ -62,6 +93,11 @@ class TestCase(unittest.TestCase):
     # Avoid printing docstrings.
     def shortDescription(self):
         return None
+
+    def assertStartsWith(self, start, text, message=None):
+        if message is None:
+            message = 'text does not start with %s' % start
+        self.assertTrue(text.startswith(start), message)
 
 
 def safe_rmpath(path):
@@ -95,9 +131,10 @@ class TestReloadConf(TestCase):
         safe_rmpath(TESTFN)
         safe_rmpath(cls.file)
         safe_rmpath(cls.prog)
+
         try:
             shutil.rmtree(cls.dir)
-        except IOError:
+        except OSError:
             pass
 
     def run_cli(self, watch=None, config=None, command=None, test=None,
@@ -112,28 +149,23 @@ class TestReloadConf(TestCase):
         if test is None:
             test = '--test=/bin/true'
 
-        sysargv = sys.argv
+        sysargv = [
+            watch,
+            config,
+            command,
+            test,
+        ]
 
-        try:
-            sys.argv = [
-                'reloadconf',
-                watch,
-                config,
-                command,
-                test,
-            ]
+        if others:
+            assert isinstance(others, list), others
+            sysargv.extend(others)
 
-            if others:
-                assert isinstance(others, list), others
-                sys.argv.extend(others)
+        for x in sysargv:
+            assert isinstance(x, str), x
 
-            for x in sys.argv:
-                assert isinstance(x, str), x
+        # run
+        main(sysargv)
 
-            # run
-            import reloadconf.__main__  # NOQA
-        finally:
-            sys.argv = sysargv
 
     # ---
 
@@ -161,73 +193,137 @@ class TestReloadConf(TestCase):
     def test_hup(self):
         """Ensure command is reloaded with valid config."""
         command = '%s %s' % (self.prog, self.sig)
-        rc = ReloadConf(self.dir, self.file, command)
-        rc.poll()
-        # Command should now be running.
-        self.assertTrue(rc.check_command())
-        # Write out "config" file.
-        with open(pathjoin(self.dir, basename(self.file)), 'wb') as f:
-            f.write(b'foo')
-        # Command should receive HUP.
-        rc.poll()
-        time.sleep(0.1)
-        self.assertTrue(pathexists(self.sig))
+        with ReloadConf(self.dir, self.file, command) as rc:
+            rc.poll()
+            # Command should now be running.
+            self.assertTrue(rc.check_command())
+            # Write out "config" file.
+            with open(pathjoin(self.dir, basename(self.file)), 'wb') as f:
+                f.write(b'foo')
+            # Command should receive HUP.
+            rc.poll()
+            time.sleep(0.1)
+            self.assertTrue(pathexists(self.sig))
+
+    def test_inotify(self):
+        """Ensure command is reloaded with valid config (inotify)."""
+        command = '%s %s' % (self.prog, self.sig)
+        with ReloadConf(self.dir, self.file, command, inotify=True) as rc:
+            rc.poll()
+            # Command should now be running.
+            self.assertTrue(rc.check_command())
+            # Write out "config" file.
+            with open(pathjoin(self.dir, basename(self.file)), 'wb') as f:
+                f.write(b'foo')
+            # Command should receive HUP.
+            rc.poll()
+            time.sleep(0.1)
+            self.assertTrue(pathexists(self.sig))
 
     def test_reload(self):
         """Ensure reload command is run (instead of HUP) when provided."""
         reload = '/bin/touch %s' % self.sig
-        rc = ReloadConf(self.dir, self.file, '/bin/sleep 1', reload=reload)
-        rc.poll()
-        # Command should now be running.
-        self.assertTrue(rc.check_command())
-        self.assertFalse(pathexists(self.sig))
-        # Write out "config" file.
-        with open(pathjoin(self.dir, basename(self.file)), 'wb') as f:
-            f.write(b'foo')
-        # Reload command should be executed.
-        rc.poll()
-        time.sleep(0.1)
-        self.assertTrue(pathexists(self.sig))
+        with ReloadConf(self.dir, self.file, '/bin/sleep 1', reload=reload) as rc:
+            rc.poll()
+            # Command should now be running.
+            self.assertTrue(rc.check_command())
+            self.assertFalse(pathexists(self.sig))
+            # Write out "config" file.
+            with open(pathjoin(self.dir, basename(self.file)), 'wb') as f:
+                f.write(b'foo')
+            # Reload command should be executed.
+            rc.poll()
+            time.sleep(0.1)
+            self.assertTrue(pathexists(self.sig))
 
     def test_nohup(self):
         """Ensure that command is not reloaded with invalid config."""
         command = '%s %s' % (self.prog, self.sig)
-        rc = ReloadConf(self.dir, self.file, command, '/bin/true')
-        rc.poll()
-        # Command should now be running.
-        self.assertTrue(rc.check_command())
-        # A bit nasty, but we want the check to fail this time...
-        rc.test = '/bin/false'
-        # Write out "config" file.
-        with open(pathjoin(self.dir, basename(self.file)), 'wb') as f:
-            f.write(b'foo')
-        # Command should NOT receive HUP.
-        rc.poll()
-        time.sleep(0.1)
-        self.assertFalse(pathexists(self.sig))
+        with ReloadConf(self.dir, self.file, command, '/bin/true') as rc:
+            rc.poll()
+            # Command should now be running.
+            self.assertTrue(rc.check_command())
+            # A bit nasty, but we want the check to fail this time...
+            rc.test = '/bin/false'
+            # Write out "config" file.
+            with open(pathjoin(self.dir, basename(self.file)), 'wb') as f:
+                f.write(b'foo')
+            # Command should NOT receive HUP.
+            rc.poll()
+            time.sleep(0.1)
+            self.assertFalse(pathexists(self.sig))
+
+    def test_chown_fail(self):
+        """Test chown validation."""
+        # Ensure chown must have len() == 2:
+        with self.assertRaises(AssertionError):
+            ReloadConf(self.dir, [], None, chown=(1, 2, 3))
+
+    def test_chown_user(self):
+        """Test chown argument handling (user only)."""
+        # Ensure chown handles a user name:
+        with ReloadConf(self.dir, self.file, '/bin/true', chown='nobody') as rc:
+            self.assertIsInstance(rc.chown[0], numbers.Number)
+            self.assertEqual(-1, rc.chown[1])
+
+        with ReloadConf(self.dir, self.file, '/bin/true', chown=TEST_UID) as rc:
+            self.assertEqual((TEST_UID, -1), rc.chown)
+
+    @skipIf(os.getuid() != 0, 'Only works as root')
+    def test_chown(self):
+        """Test chown capability."""
+        with ReloadConf(self.dir, self.file, '/bin/true',
+                        chown=(TEST_UID, TEST_UID)) as rc:
+            with open(pathjoin(self.dir, basename(self.file)), 'wb') as f:
+                f.write(b'foo')
+            rc.poll()
+            self.assertEqual(TEST_UID, os.stat(self.file).st_uid)
+            self.assertEqual(TEST_UID, os.stat(self.file).st_gid)
+
+    def test_chmod(self):
+        """Test chmod capability."""
+        # Ensure chmod must be numeric:
+        with self.assertRaises(AssertionError):
+            ReloadConf(self.dir, [], None, chmod='foo')
+        # Ensure config files are properly chmod()ed:
+        with ReloadConf(self.dir, self.file, '/bin/true', chmod=0o700) as rc:
+            watch = pathjoin(self.dir, basename(self.file))
+            with open(watch, 'wb') as f:
+                f.write(b'foo')
+            os.chmod(watch, 0o755)
+            rc.poll()
+            self.assertEqual(stat.S_IMODE(os.stat(self.file).st_mode), 0o700)
+
+    def test_nodir(self):
+        """Test that watch directory does not need to exist."""
+        # Remove the watch directory.
+        os.rmdir(self.dir)
+
+        # Ensure reloadconf creates the watch directory.
+        with ReloadConf(self.dir, self.file, '/bin/sleep 1',
+                        chown=(TEST_UID, TEST_UID), chmod=0o700) as rc:
+            rc.poll()
+            self.assertTrue(rc.check_command())
+            self.assertTrue(isdir(self.dir))
 
     def test_main(self):
         """Test that reloadconf blocks on command."""
-        class Sentinal(Exception):
-            pass
-
-        def _alarm(*args):
-            raise Sentinal()
-
-        signal.signal(signal.SIGALRM, _alarm)
-        signal.alarm(2)
-
-        with self.assertRaises(Sentinal):
-            self.run_cli()
+        with timeout():
+            with self.assertRaises(TestTimeoutError):
+                self.run_cli()
 
     def test_wait_timeout(self):
-        with self.assertRaises(AssertionError) as exc:
-            self.run_cli(others=['--wait-timeout=-1'])
-        self.assertEqual(exc.exception.message, "invalid timeout '-1'")
+        with timeout():
+            with self.assertRaises(DocoptExit) as exc:
+                self.run_cli(others=['--wait-timeout=-1',
+                                     '--wait-for-path=foo-bar-path'])
+            self.assertStartsWith("Invalid timeout", exc.exception.args[0])
 
-        with self.assertRaises(AssertionError) as exc:
-            self.run_cli(others=['--wait-timeout=string'])
-        self.assertEqual(exc.exception.message, "invalid timeout 'string'")
+        with timeout():
+            with self.assertRaises(DocoptExit) as exc:
+                self.run_cli(others=['--wait-timeout=string',
+                                     '--wait-for-path=foo-bar-path'])
+            self.assertStartsWith("Invalid timeout", exc.exception.args[0])
 
     def test_wait_for_path_fail(self):
         with self.assertRaises(TimeoutExpired):
@@ -235,21 +331,13 @@ class TestReloadConf(TestCase):
                                  '--wait-timeout=0.1'])
 
     def test_wait_for_path_ok(self):
-        class Sentinal(Exception):
-            pass
-
-        def _alarm(*args):
-            raise Sentinal()
-
-        signal.signal(signal.SIGALRM, _alarm)
-        signal.alarm(1)
-
         with open(TESTFN, "w"):
             pass
 
-        with self.assertRaises(Sentinal):
-            self.run_cli(others=['--wait-for-path=' + TESTFN,
-                                 '--wait-timeout=0.1'])
+        with timeout():
+            with self.assertRaises(TestTimeoutError):
+                self.run_cli(others=['--wait-for-path=' + TESTFN,
+                                    '--wait-timeout=0.1'])
 
     def test_wait_for_sock_fail(self):
         with self.assertRaises(TimeoutExpired):
@@ -257,18 +345,10 @@ class TestReloadConf(TestCase):
                                  '--wait-timeout=0.1'])
 
     def test_wait_for_sock_ok(self):
-        class Sentinal(Exception):
-            pass
-
-        def _alarm(*args):
-            raise Sentinal()
-
-        signal.signal(signal.SIGALRM, _alarm)
-        signal.alarm(1)
-
-        with self.assertRaises(Sentinal):
-            self.run_cli(others=['--wait-for-sock=google.com:80',
-                                 '--wait-timeout=3'])
+        with timeout():
+            with self.assertRaises(TestTimeoutError):
+                self.run_cli(others=['--wait-for-sock=google.com:80',
+                                    '--wait-timeout=3'])
 
 
 if __name__ == '__main__':

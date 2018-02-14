@@ -1,2 +1,5 @@
 docopt
-
+schema
+inotify
+six
+contextlib2
