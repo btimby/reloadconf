@@ -4,6 +4,7 @@ import errno
 import logging
 import os
 import signal
+import socket
 import subprocess
 import time
 import shlex
@@ -24,6 +25,11 @@ from hashlib import md5
 LOGGER = logging.getLogger(__name__)
 LOGGER.addHandler(logging.NullHandler())
 DEVNULL = open(os.devnull, 'w')
+DEFAULT_TIMEOUT = 5
+
+
+class TimeoutExpired(Exception):
+    pass
 
 
 def checksum(path):
@@ -62,6 +68,7 @@ class ReloadConf(object):
     """
 
     def __init__(self, watch, config, command, reload=None, test=None,
+                 wait_for_path=None, wait_for_sock=None, wait_timeout=None,
                  chown=None, chmod=None, inotify=False):
         if isinstance(config, str):
             config = (config,)
@@ -76,6 +83,10 @@ class ReloadConf(object):
         self.process = None
         self.watch = self._setup_watch(watch)
         self.inotify = self._setup_inotify(inotify)
+
+        # Wait for preconditions (or throw)
+        self.wait_for_path(wait_for_path, wait_timeout)
+        self.wait_for_sock(wait_for_sock, wait_timeout)
 
     def __enter__(self):
         return self
@@ -196,6 +207,55 @@ class ReloadConf(object):
     def check_command(self):
         """Return False if command is dead, otherwise True."""
         return self.process is not None and self.process.poll() is None
+
+    def wait_for_path(self, path, timeout):
+        if path is None:
+            return
+
+        assert isinstance(timeout, (float, int)), 'Invalid timeout'
+        assert timeout > 0, 'Invalid timeout'
+
+        assert isinstance(path, str), 'Invalid path'
+
+        give_up_at = time.time() + timeout
+
+        while time.time() <= give_up_at:
+            if os.path.exists(path):
+                return
+            time.sleep(0.1)
+
+        raise TimeoutExpired("file %r still does not exist after %s secs" % (
+                             path, timeout))
+
+    def wait_for_sock(self, addr, timeout):
+        if addr is None:
+            return
+
+        assert isinstance(timeout, (float, int)), 'Invalid timeout'
+        assert timeout > 0, 'Invalid timeout'
+
+        assert len(addr) == 2, 'Invalid address'
+        assert isinstance(addr[0], str), 'Invalid host'
+        assert isinstance(addr[1], int), 'Invalid port'
+        assert 0 < addr[1] < 65536, 'Invalid port'
+
+        err, give_up_at = None, time.time() + int(timeout)
+
+        while time.time() <= give_up_at:
+            s = socket.socket()
+            try:
+                s.connect(addr)
+            except Exception as _:
+                err = _
+                time.sleep(0.1)
+            else:
+                return
+            finally:
+                s.close()
+
+        raise TimeoutExpired(
+            "can't connect to %s after %s secs; reason: %r" % (addr, timeout,
+                                                               err))
 
     def get_config_files(self):
         """Use polling method to enumerate files in watch dir."""

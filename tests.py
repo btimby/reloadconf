@@ -1,25 +1,35 @@
 from __future__ import absolute_import
 
+import errno
+import logging
 import os
 import shutil
 import signal
+import stat
 import sys
 import stat
 import tempfile
 import time
-import logging
 import unittest
 import numbers
 
+import contextlib
+
 from unittest import skipIf
+
+from docopt import DocoptExit
 
 from os.path import exists as pathexists
 from os.path import join as pathjoin
 from os.path import basename, isdir
 
 from reloadconf import ReloadConf
+from reloadconf import TimeoutExpired
 from reloadconf.__main__ import main
 
+
+# Test file name used during tests.
+TESTFN = "rconf-testfile"
 
 # Program to indicate HUP signal received.
 TEST_PROGRAM = b"""#!/usr/bin/env python
@@ -49,7 +59,62 @@ logging.basicConfig(
 LOGGER = logging.getLogger(__name__)
 
 
-class TestReloadConf(unittest.TestCase):
+class TestTimeoutError(Exception):
+    def __init__(self):
+        super(TestTimeoutError, self).__init__('Timeout exceeded')
+
+
+@contextlib.contextmanager
+def timeout(timeout=2):
+
+    def _alarm(*args):
+        raise TestTimeoutError()
+
+    signal.signal(signal.SIGALRM, _alarm)
+    signal.alarm(timeout)
+
+    # Let the code run, but our alarm will interrupt it if it exceeds timeout.
+    yield
+
+    signal.signal(signal.SIGALRM, signal.SIG_IGN)
+
+
+class TestCase(unittest.TestCase):
+
+    # Print a full path representation of the single unit tests
+    # being run, e.g. tests.TestReloadConf.test_fail.
+    def __str__(self):
+        mod = self.__class__.__module__
+        if mod == '__main__':
+            mod = os.path.splitext(os.path.basename(__file__))[0]
+        return "%s.%s.%s" % (
+            mod, self.__class__.__name__, self._testMethodName)
+
+    # Avoid printing docstrings.
+    def shortDescription(self):
+        return None
+
+    def assertStartsWith(self, start, text, message=None):
+        if message is None:
+            message = 'text does not start with %s' % start
+        self.assertTrue(text.startswith(start), message)
+
+
+def safe_rmpath(path):
+    "Convenience function for removing temporary test files or dirs"
+    try:
+        st = os.stat(path)
+        if stat.S_ISDIR(st.st_mode):
+            os.rmdir(path)
+        else:
+            os.remove(path)
+    except OSError as err:
+        if err.errno != errno.ENOENT:
+            raise
+
+
+class TestReloadConf(TestCase):
+
     @classmethod
     def setUp(cls):
         cls.dir = tempfile.mkdtemp()
@@ -59,18 +124,50 @@ class TestReloadConf(unittest.TestCase):
             p.write(TEST_PROGRAM)
             cls.prog = p.name
         os.chmod(cls.prog, 0o700)
+        safe_rmpath(TESTFN)
 
     @classmethod
     def tearDown(cls):
-        for path in (cls.file, cls.prog):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
+        safe_rmpath(TESTFN)
+        safe_rmpath(cls.file)
+        safe_rmpath(cls.prog)
+
         try:
             shutil.rmtree(cls.dir)
         except OSError:
             pass
+
+    def run_cli(self, watch=None, config=None, command=None, test=None,
+                others=None):
+        """Helper to run realoadconf as if it were run from the cmdline."""
+        if watch is None:
+            watch = '--watch=%s' % self.dir
+        if config is None:
+            config = '--config=%s' % self.file
+        if command is None:
+            command = '--command=/bin/sleep 1'
+        if test is None:
+            test = '--test=/bin/true'
+
+        sysargv = [
+            watch,
+            config,
+            command,
+            test,
+        ]
+
+        if others:
+            assert isinstance(others, list), others
+            sysargv.extend(others)
+
+        for x in sysargv:
+            assert isinstance(x, str), x
+
+        # run
+        main(sysargv)
+
+
+    # ---
 
     def test_fail(self):
         """Ensure command is NOT run when test fails."""
@@ -199,7 +296,10 @@ class TestReloadConf(unittest.TestCase):
 
     def test_nodir(self):
         """Test that watch directory does not need to exist."""
+        # Remove the watch directory.
         os.rmdir(self.dir)
+
+        # Ensure reloadconf creates the watch directory.
         with ReloadConf(self.dir, self.file, '/bin/sleep 1',
                         chown=(TEST_UID, TEST_UID), chmod=0o700) as rc:
             rc.poll()
@@ -208,34 +308,48 @@ class TestReloadConf(unittest.TestCase):
 
     def test_main(self):
         """Test that reloadconf blocks on command."""
-        class Sentinal(Exception):
+        with timeout():
+            with self.assertRaises(TestTimeoutError):
+                self.run_cli()
+
+    def test_wait_timeout(self):
+        with timeout():
+            with self.assertRaises(DocoptExit) as exc:
+                self.run_cli(others=['--wait-timeout=-1',
+                                     '--wait-for-path=foo-bar-path'])
+            self.assertStartsWith("Invalid timeout", exc.exception.args[0])
+
+        with timeout():
+            with self.assertRaises(DocoptExit) as exc:
+                self.run_cli(others=['--wait-timeout=string',
+                                     '--wait-for-path=foo-bar-path'])
+            self.assertStartsWith("Invalid timeout", exc.exception.args[0])
+
+    def test_wait_for_path_fail(self):
+        with self.assertRaises(TimeoutExpired):
+            self.run_cli(others=['--wait-for-path=non-existent-file',
+                                 '--wait-timeout=0.1'])
+
+    def test_wait_for_path_ok(self):
+        with open(TESTFN, "w"):
             pass
 
-        def _alarm(*args):
-            raise Sentinal()
+        with timeout():
+            with self.assertRaises(TestTimeoutError):
+                self.run_cli(others=['--wait-for-path=' + TESTFN,
+                                    '--wait-timeout=0.1'])
 
-        signal.signal(signal.SIGALRM, _alarm)
-        signal.alarm(2)
+    def test_wait_for_sock_fail(self):
+        with self.assertRaises(TimeoutExpired):
+            self.run_cli(others=['--wait-for-sock=localhost:65000',
+                                 '--wait-timeout=0.1'])
 
-        sysargv = [
-            '--watch=%s' % self.dir,
-            '--config=%s' % self.file,
-            '--command=/bin/sleep 1',
-            '--test=/bin/true',
-            '--chmod=700',
-            '--chown=2000,2000',
-        ]
+    def test_wait_for_sock_ok(self):
+        with timeout():
+            with self.assertRaises(TestTimeoutError):
+                self.run_cli(others=['--wait-for-sock=google.com:80',
+                                    '--wait-timeout=3'])
 
-        try:
-            try:
-                main(sysargv)
-                self.fail('Should never reach this')
-
-            except Sentinal:
-                pass
-
-        finally:
-            signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(verbosity=2)
