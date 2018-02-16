@@ -296,7 +296,7 @@ class ReloadConf(object):
             for fn in filenames:
                 if fn not in self.watch_names:
                     filenames.remove(fn)
-                if fn in config:
+                elif fn in config:
                     filenames.remove(fn)
 
             # If we did not find any new config files, exit loop.
