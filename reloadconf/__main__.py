@@ -71,6 +71,12 @@ def user_and_group(value):
     return tuple(value)
 
 
+def config_logging(verbose):
+    logging.basicConfig(
+        format='[reloadconf %(levelname)s] %(message)s',
+        level=logging.DEBUG if verbose else logging.INFO)
+
+
 def main(argv):
     """
     reloadconf - Monitor config changes and safely restart.
@@ -152,13 +158,7 @@ def main(argv):
     except SchemaError as e:
         raise DocoptExit(e.args[0])
 
-    logger = logging.getLogger()
-    # Set up logging so we can see output.
-    logger.addHandler(logging.StreamHandler(sys.stdout))
-
-    logger.setLevel(logging.INFO)
-    if opt.pop('--debug', None):
-        logger.setLevel(logging.DEBUG)
+    config_logging(verbose=bool(opt.pop('--debug', None)))
 
     # Convert from CLI arguments to kwargs.
     kwargs = {}
