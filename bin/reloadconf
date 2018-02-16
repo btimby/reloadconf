@@ -3,4 +3,4 @@
 import sys
 import reloadconf.__main__
 
-reloadconf.__main__.main(sys.argv)
+reloadconf.__main__.main(sys.argv[1:])
