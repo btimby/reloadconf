@@ -219,8 +219,10 @@ class ReloadConf(object):
 
         give_up_at = time.time() + timeout
 
+        LOGGER.debug("waiting for path %s" % path)
         while time.time() <= give_up_at:
             if os.path.exists(path):
+                LOGGER.debug("path %s exists; moving on" % path)
                 return
             time.sleep(0.1)
 
@@ -241,6 +243,7 @@ class ReloadConf(object):
 
         err, give_up_at = None, time.time() + int(timeout)
 
+        LOGGER.debug("waiting to connect to addr %s" % str(addr))
         while time.time() <= give_up_at:
             s = socket.socket()
             try:
@@ -249,6 +252,8 @@ class ReloadConf(object):
                 err = _
                 time.sleep(0.1)
             else:
+                LOGGER.debug(
+                    "connection to %s succeeded; moving on" % str(addr))
                 return
             finally:
                 s.close()
