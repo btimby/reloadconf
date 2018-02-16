@@ -85,8 +85,8 @@ class ReloadConf(object):
         self.inotify = self._setup_inotify(inotify)
 
         # Wait for preconditions (or throw)
-        self.wait_for_path(wait_for_path, wait_timeout)
         self.wait_for_sock(wait_for_sock, wait_timeout)
+        self.wait_for_path(wait_for_path, wait_timeout)
 
     def __enter__(self):
         return self
