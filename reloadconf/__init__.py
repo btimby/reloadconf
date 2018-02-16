@@ -79,14 +79,13 @@ class ReloadConf(object):
         self.chown, self.chmod = self._setup_permissions(chown, chmod)
         # Extract names for use later.
         self.watch_names = [basename(f) for f in self.config]
+        # Wait for preconditions (or throw)
+        self.wait_for_sock(wait_for_sock, wait_timeout)
+        self.wait_for_path(wait_for_path, wait_timeout)
         # The process (once started).
         self.process = None
         self.watch = self._setup_watch(watch)
         self.inotify = self._setup_inotify(inotify)
-
-        # Wait for preconditions (or throw)
-        self.wait_for_sock(wait_for_sock, wait_timeout)
-        self.wait_for_path(wait_for_path, wait_timeout)
 
     def __enter__(self):
         return self
@@ -107,6 +106,7 @@ class ReloadConf(object):
                     'cannot use inotify, package not installed')
 
             else:
+                LOGGER.debug("setting up inotify for %r" % self.watch)
                 i = inotify.adapters.Inotify(paths=[self.watch],
                                              block_duration_s=0)
 
@@ -119,6 +119,7 @@ class ReloadConf(object):
         if pathexists(watch):
             return watch
 
+        LOGGER.debug("crearing %r directory" % watch)
         os.makedirs(watch)
 
         if self.chown:
