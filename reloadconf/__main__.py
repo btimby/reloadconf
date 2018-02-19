@@ -172,8 +172,8 @@ def main(argv):
         raise DocoptExit(e.args[0])
 
     with rc:
-        LOGGER.info('Reloadconf monitoring %s for %s', kwargs['watch'],
-                    kwargs['command'])
+        LOGGER.info('Reloadconf is monitoring directory %r for command %r',
+                    kwargs['watch'], kwargs['command'])
 
         while True:
             try:
