@@ -19,7 +19,7 @@ test-by-name:
 lint:
 	$(PYTHON) -m flake8 reloadconf
 
-dependencies:
+pydeps:
 	$(PYTHON) -m pip install -r requirements.txt
 	$(PYTHON) -m pip install coveralls
 	$(PYTHON) -m pip install flake8
@@ -34,3 +34,8 @@ coveralls:
 
 clean:
 	rm -rf dist/ *.egg-info htmlcov .coverage
+
+ci:
+	$(MAKE) pydeps
+	$(MAKE) install
+	$(MAKE) test
