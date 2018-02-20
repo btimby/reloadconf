@@ -1,4 +1,4 @@
-PYTHON = python3
+PYTHON = python
 ARGS ?=
 # In not in a virtualenv, add --user options for install commands.
 INSTALL_OPTS = `$(PYTHON) -c "import sys; print('' if hasattr(sys, 'real_prefix') else '--user')"`
