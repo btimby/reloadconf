@@ -15,6 +15,7 @@ from reloadconf import ReloadConf
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.addHandler(logging.NullHandler())
+POLL_TIMEOUT = 3
 
 
 def host_and_port(value):
@@ -172,8 +173,8 @@ def main(argv):
         raise DocoptExit(e.args[0])
 
     with rc:
-        LOGGER.info('Reloadconf is monitoring directory %r for command %r',
-                    kwargs['watch'], kwargs['command'])
+        LOGGER.info('Reloadconf monitoring %s for %s', kwargs['watch'],
+                    kwargs['command'])
 
         while True:
             try:
@@ -183,7 +184,7 @@ def main(argv):
                 LOGGER.exception('Error polling', exc_info=True)
 
             # Check up to 20 times a minute.
-            time.sleep(3.0)
+            time.sleep(POLL_TIMEOUT)
 
 
 if __name__ == '__main__':

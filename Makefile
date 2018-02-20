@@ -1,5 +1,8 @@
-PYTHON = python
+PYTHON = python3
 ARGS ?=
+# In not in a virtualenv, add --user options for install commands.
+INSTALL_OPTS = `$(PYTHON) -c "import sys; print('' if hasattr(sys, 'real_prefix') else '--user')"`
+
 
 coverage:
 	$(PYTHON) -m coverage run tests.py
@@ -7,14 +10,14 @@ coverage:
 	firefox htmlcov/index.html
 
 install:
-	$(PYTHON) setup.py develop
+	$(PYTHON) setup.py develop $(INSTALL_OPTS)
 
 test:
-	$(PYTHON) tests.py
+	PYTHONWARNINGS=all $(PYTHON) tests.py
 
 # E.g. make test-by-name ARGS=tests.TestReloadConf.test_wait_timeout
 test-by-name:
-	$(PYTHON) -m unittest -v $(ARGS)
+	PYTHONWARNINGS=all $(PYTHON) -m unittest -v $(ARGS)
 
 lint:
 	$(PYTHON) -m flake8 reloadconf
