@@ -23,14 +23,12 @@ lint:
 	$(PYTHON) -m flake8 reloadconf
 
 dependencies:
-	$(MAKE) install-pip
 	$(PYTHON) -m pip install -r requirements.txt
 	$(PYTHON) -m pip install coveralls
 	$(PYTHON) -m pip install flake8
 	$(PYTHON) -m pip install coverage
 
 travis:
-	$(MAKE) install-pip
 	$(MAKE) dependencies
 	$(MAKE) install
 	$(MAKE) test
