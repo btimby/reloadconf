@@ -23,14 +23,18 @@ lint:
 	$(PYTHON) -m flake8 reloadconf
 
 dependencies:
+	$(MAKE) install-pip
 	$(PYTHON) -m pip install -r requirements.txt
 	$(PYTHON) -m pip install coveralls
 	$(PYTHON) -m pip install flake8
 	$(PYTHON) -m pip install coverage
 
 travis:
+	$(MAKE) install-pip
+	$(MAKE) dependencies
+	$(MAKE) install
+	$(MAKE) test
 	$(PYTHON) -m flake8 reloadconf
-	$(PYTHON) -m coverage run tests.py
 
 coveralls:
 	$(PYTHON) -m coveralls -v
@@ -38,7 +42,21 @@ coveralls:
 clean:
 	rm -rf dist/ *.egg-info htmlcov .coverage
 
-ci:
-	$(MAKE) dependencies
-	$(MAKE) install
-	$(MAKE) test
+install-pip:  ## Install pip (no-op if already installed).
+	$(PYTHON) -c \
+		"import sys, ssl, os, pkgutil, tempfile, atexit; \
+		sys.exit(0) if pkgutil.find_loader('pip') else None; \
+		pyexc = 'from urllib.request import urlopen' if sys.version_info[0] == 3 else 'from urllib2 import urlopen'; \
+		exec(pyexc); \
+		ctx = ssl._create_unverified_context() if hasattr(ssl, '_create_unverified_context') else None; \
+		kw = dict(context=ctx) if ctx else {}; \
+		req = urlopen('https://bootstrap.pypa.io/get-pip.py', **kw); \
+		data = req.read(); \
+		f = tempfile.NamedTemporaryFile(suffix='.py'); \
+		atexit.register(f.close); \
+		f.write(data); \
+		f.flush(); \
+		print('downloaded %s' % f.name); \
+		code = os.system('%s %s --user' % (sys.executable, f.name)); \
+		f.close(); \
+		sys.exit(code);"
