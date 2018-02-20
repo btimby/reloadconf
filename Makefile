@@ -10,6 +10,7 @@ coverage:
 	firefox htmlcov/index.html
 
 install:
+	$(MAKE) install-git-hooks
 	$(PYTHON) setup.py develop $(INSTALL_OPTS)
 
 test:
@@ -59,3 +60,7 @@ install-pip:  ## Install pip (no-op if already installed).
 		code = os.system('%s %s --user' % (sys.executable, f.name)); \
 		f.close(); \
 		sys.exit(code);"
+
+install-git-hooks:
+	ln -sf ../../.git-pre-commit .git/hooks/pre-commit
+	chmod +x .git/hooks/pre-commit
