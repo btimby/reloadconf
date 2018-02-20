@@ -34,7 +34,7 @@ travis:
 	$(MAKE) dependencies
 	$(MAKE) install
 	$(MAKE) test
-	$(PYTHON) -m flake8 reloadconf
+	$(MAKE) lint
 
 coveralls:
 	$(PYTHON) -m coveralls -v
