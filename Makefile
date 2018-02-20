@@ -20,9 +20,10 @@ test-by-name:
 	PYTHONWARNINGS=all $(PYTHON) -m unittest -v $(ARGS)
 
 lint:
-	$(PYTHON) -m flake8 reloadconf
+	@git ls-files | grep \\.py$ | xargs $(PYTHON) -m flake8
 
 dependencies:
+	$(MAKE) install-pip
 	$(PYTHON) -m pip install -r requirements.txt
 	$(PYTHON) -m pip install coveralls
 	$(PYTHON) -m pip install flake8
