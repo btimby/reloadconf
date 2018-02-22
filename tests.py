@@ -7,7 +7,6 @@ import shutil
 import signal
 import stat
 import sys
-import stat
 import tempfile
 import time
 import unittest
@@ -166,7 +165,6 @@ class TestReloadConf(TestCase):
         # run
         main(sysargv)
 
-
     # ---
 
     def test_fail(self):
@@ -223,7 +221,8 @@ class TestReloadConf(TestCase):
     def test_reload(self):
         """Ensure reload command is run (instead of HUP) when provided."""
         reload = '/bin/touch %s' % self.sig
-        with ReloadConf(self.dir, self.file, '/bin/sleep 1', reload=reload) as rc:
+        with ReloadConf(
+                self.dir, self.file, '/bin/sleep 1', reload=reload) as rc:
             rc.poll()
             # Command should now be running.
             self.assertTrue(rc.check_command())
@@ -262,11 +261,13 @@ class TestReloadConf(TestCase):
     def test_chown_user(self):
         """Test chown argument handling (user only)."""
         # Ensure chown handles a user name:
-        with ReloadConf(self.dir, self.file, '/bin/true', chown='nobody') as rc:
+        with ReloadConf(
+                self.dir, self.file, '/bin/true', chown='nobody') as rc:
             self.assertIsInstance(rc.chown[0], numbers.Number)
             self.assertEqual(-1, rc.chown[1])
 
-        with ReloadConf(self.dir, self.file, '/bin/true', chown=TEST_UID) as rc:
+        with ReloadConf(
+                self.dir, self.file, '/bin/true', chown=TEST_UID) as rc:
             self.assertEqual((TEST_UID, -1), rc.chown)
 
     @skipIf(os.getuid() != 0, 'Only works as root')
@@ -337,7 +338,7 @@ class TestReloadConf(TestCase):
         with timeout():
             with self.assertRaises(TestTimeoutError):
                 self.run_cli(others=['--wait-for-path=' + TESTFN,
-                                    '--wait-timeout=0.1'])
+                                     '--wait-timeout=0.1'])
 
     def test_wait_for_sock_fail(self):
         with self.assertRaises(TimeoutExpired):
@@ -348,7 +349,7 @@ class TestReloadConf(TestCase):
         with timeout():
             with self.assertRaises(TestTimeoutError):
                 self.run_cli(others=['--wait-for-sock=google.com:80',
-                                    '--wait-timeout=3'])
+                                     '--wait-timeout=3'])
 
 
 if __name__ == '__main__':

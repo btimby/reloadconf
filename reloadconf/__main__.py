@@ -15,6 +15,7 @@ from reloadconf import ReloadConf
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.addHandler(logging.NullHandler())
+POLL_TIMEOUT = 3
 
 
 def host_and_port(value):
@@ -69,6 +70,12 @@ def user_and_group(value):
         value.append(None)
 
     return tuple(value)
+
+
+def config_logging(verbose):
+    logging.basicConfig(
+        format='[reloadconf %(levelname)s] %(message)s',
+        level=logging.DEBUG if verbose else logging.INFO)
 
 
 def main(argv):
@@ -152,13 +159,7 @@ def main(argv):
     except SchemaError as e:
         raise DocoptExit(e.args[0])
 
-    logger = logging.getLogger()
-    # Set up logging so we can see output.
-    logger.addHandler(logging.StreamHandler(sys.stdout))
-
-    logger.setLevel(logging.INFO)
-    if opt.pop('--debug', None):
-        logger.setLevel(logging.DEBUG)
+    config_logging(verbose=bool(opt.pop('--debug', None)))
 
     # Convert from CLI arguments to kwargs.
     kwargs = {}
@@ -183,8 +184,8 @@ def main(argv):
                 LOGGER.exception('Error polling', exc_info=True)
 
             # Check up to 20 times a minute.
-            time.sleep(3.0)
+            time.sleep(POLL_TIMEOUT)
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main(sys.argv[1:])

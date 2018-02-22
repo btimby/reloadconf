@@ -79,14 +79,13 @@ class ReloadConf(object):
         self.chown, self.chmod = self._setup_permissions(chown, chmod)
         # Extract names for use later.
         self.watch_names = [basename(f) for f in self.config]
+        # Wait for preconditions (or throw)
+        self.wait_for_sock(wait_for_sock, wait_timeout)
+        self.wait_for_path(wait_for_path, wait_timeout)
         # The process (once started).
         self.process = None
         self.watch = self._setup_watch(watch)
         self.inotify = self._setup_inotify(inotify)
-
-        # Wait for preconditions (or throw)
-        self.wait_for_path(wait_for_path, wait_timeout)
-        self.wait_for_sock(wait_for_sock, wait_timeout)
 
     def __enter__(self):
         return self
@@ -97,7 +96,6 @@ class ReloadConf(object):
     def _setup_inotify(self, flag):
         """Set up inotify if requested."""
         i = None
-
         if flag:
             try:
                 import inotify.adapters
@@ -107,8 +105,11 @@ class ReloadConf(object):
                     'cannot use inotify, package not installed')
 
             else:
+                LOGGER.debug("setting up inotify for %r" % self.watch)
                 i = inotify.adapters.Inotify(paths=[self.watch],
                                              block_duration_s=0)
+        else:
+            LOGGER.debug("use polling (instead of inotify)")
 
         return (flag, i)
 
@@ -117,23 +118,29 @@ class ReloadConf(object):
         assert not isfile(watch), 'watch dir is a file'
 
         if pathexists(watch):
+            LOGGER.debug("watch directory %r already exists", watch)
             return watch
 
+        LOGGER.debug("creating %r watch directory" % watch)
         os.makedirs(watch)
 
         if self.chown:
+            LOGGER.debug("chown()ing %r", watch)
             try:
                 os.chown(watch, *self.chown)
 
             except OSError:
-                pass  # Non-fatal
+                # Non-fatal
+                LOGGER.exception("chown()ing %r failed; moving on", watch)
 
         if self.chmod:
+            LOGGER.debug("chmod()ing %r", watch)
             try:
                 os.chmod(watch, self.chmod)
 
             except OSError:
-                pass  # Non-fatal
+                # Non-fatal
+                LOGGER.exception("chmod()ing %r failed; moving on", watch)
 
         return watch
 
@@ -180,6 +187,7 @@ class ReloadConf(object):
 
     def start_command(self, wait_for_config=True):
         """Run the service command."""
+        LOGGER.debug("Running start command %s", str(self.command))
         self.process = subprocess.Popen(shlex.split(self.command))
         LOGGER.info(
             'Command (%s) started with pid %s', self.command, self.process.pid)
@@ -201,8 +209,9 @@ class ReloadConf(object):
                 self.process.send_signal(signal.SIGHUP)
 
         else:
-            LOGGER.info('Executing reload command...')
-            subprocess.call(shlex.split(self.reload))
+            cmd = shlex.split(self.reload)
+            LOGGER.info('Executing reload command %s', str(cmd))
+            subprocess.call(cmd)
 
     def check_command(self):
         """Return False if command is dead, otherwise True."""
@@ -221,7 +230,9 @@ class ReloadConf(object):
 
         while time.time() <= give_up_at:
             if os.path.exists(path):
+                LOGGER.debug("path %r exists; moving on", path)
                 return
+            LOGGER.debug("waiting for path %r to exist", path)
             time.sleep(0.1)
 
         raise TimeoutExpired("file %r still does not exist after %s secs" % (
@@ -246,9 +257,12 @@ class ReloadConf(object):
             try:
                 s.connect(addr)
             except Exception as _:
+                LOGGER.debug("waiting to connect to addr %s" % str(addr))
                 err = _
                 time.sleep(0.1)
             else:
+                LOGGER.debug(
+                    "connection to %s succeeded; moving on" % str(addr))
                 return
             finally:
                 s.close()
@@ -286,11 +300,13 @@ class ReloadConf(object):
 
         while True:
             filenames = self.get_config_files()
+            LOGGER.debug("polling get_config(), files=%r",
+                         ", ".join(filenames))
 
             for fn in filenames:
                 if fn not in self.watch_names:
                     filenames.remove(fn)
-                if fn in config:
+                elif fn in config:
                     filenames.remove(fn)
 
             # If we did not find any new config files, exit loop.
@@ -312,7 +328,8 @@ class ReloadConf(object):
         config = self.get_config()
 
         if config:
-            LOGGER.info('New configuration found %s', ', '.join(config))
+            LOGGER.info("New configuration found for files '%s'",
+                        ', '.join(config))
             # TODO: compare new config checksums with old to see if there are
             # really changes.
             self.test_and_swap(config)
@@ -329,6 +346,13 @@ class ReloadConf(object):
         if self.process is not None:
             LOGGER.info('Killing command...')
             self.process.kill()
+            if PY3:
+                LOGGER.debug('Waiting for process to exit...')
+                try:
+                    self.process.wait(timeout=DEFAULT_TIMEOUT)
+                except TimeoutExpired:
+                    LOGGER.warning("Command survived kill() after %s secs; "
+                                   "giving up", DEFAULT_TIMEOUT)
             self.process = None
 
     def test_command(self, quiet=True):
@@ -341,7 +365,9 @@ class ReloadConf(object):
         if quiet:
             kwargs['stdout'] = DEVNULL
             kwargs['stderr'] = subprocess.STDOUT
-        return subprocess.call(shlex.split(self.test), **kwargs) == 0
+        cmd = shlex.split(self.test)
+        LOGGER.debug("Running test command %s", str(cmd))
+        return subprocess.call(cmd, **kwargs) == 0
 
     def backup_config(self):
         """Backs up entire configuration."""

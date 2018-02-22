@@ -13,7 +13,8 @@ required = [r for r in required if not r.startswith('git')]
 
 package_name = 'reloadconf'
 version_msg = '# Do not edit. See setup.py.{nl}__version__ = "{ver}"{nl}'
-version_py = os.path.join(os.path.dirname(__file__), package_name, 'version.py')
+version_py = os.path.join(os.path.dirname(__file__), package_name,
+                          'version.py')
 
 # Get version from GIT or version.py.
 try:
