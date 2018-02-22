@@ -121,7 +121,7 @@ class ReloadConf(object):
             LOGGER.debug("watch directory %r already exists", watch)
             return watch
 
-        LOGGER.debug("crearing %r watch directory" % watch)
+        LOGGER.debug("creating %r watch directory" % watch)
         os.makedirs(watch)
 
         if self.chown:
